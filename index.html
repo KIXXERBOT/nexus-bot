@@ -380,14 +380,23 @@ async function apiGetKlines(interval, limit=200) {
 }
 
 async function apiGetBalance() {
-  const d = await bGET('/v5/account/wallet-balance', {accountType:'CONTRACT'}, true);
-  const coin = d?.result?.list?.[0]?.coin?.find(c=>c.coin==='USDT');
-  if(!coin) return null;
-  return {
-    available: parseFloat(coin.availableToWithdraw||coin.walletBalance||0),
-    equity:    parseFloat(coin.equity||coin.walletBalance||0),
-    unrealPnl: parseFloat(coin.unrealisedPnl||0),
-  };
+  for (const accountType of ['UNIFIED','CONTRACT','SPOT']) {
+    try {
+      const d = await bGET('/v5/account/wallet-balance', {accountType}, true);
+      const list = d?.result?.list || [];
+      for (const acc of list) {
+        const coin = (acc.coin||[]).find(c=>c.coin==='USDT');
+        if (coin && parseFloat(coin.walletBalance||0) > 0) {
+          return {
+            available: parseFloat(coin.availableToWithdraw||coin.walletBalance||0),
+            equity:    parseFloat(coin.equity||coin.walletBalance||0),
+            unrealPnl: parseFloat(coin.unrealisedPnl||0),
+          };
+        }
+      }
+    } catch(e) {}
+  }
+  return null;
 }
 
 async function apiGetPositions() {
