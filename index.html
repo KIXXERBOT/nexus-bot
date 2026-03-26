@@ -378,7 +378,15 @@ async function apiGetBalance(){
   return null;
 }
 async function apiGetPositions(){const d=await bGET('/v5/position/list',{category:CATEGORY,symbol:SYMBOL},true);return d?.result?.list||[];}
-async function apiSetLeverage(lev){try{await bPOST('/v5/position/set-leverage',{category:CATEGORY,symbol:SYMBOL,buyLeverage:String(lev),sellLeverage:String(lev)});}catch(e){}}
+async function apiSetLeverage(lev){
+  try{
+    // Set Cross Margin mode first
+    await bPOST('/v5/position/switch-isolated',{category:CATEGORY,symbol:SYMBOL,tradeMode:0,buyLeverage:String(lev),sellLeverage:String(lev)});
+  }catch(e){}
+  try{
+    await bPOST('/v5/position/set-leverage',{category:CATEGORY,symbol:SYMBOL,buyLeverage:String(lev),sellLeverage:String(lev)});
+  }catch(e){}
+}
 async function apiPlaceOrder(side,qty){return bPOST('/v5/order/create',{category:CATEGORY,symbol:SYMBOL,side:side==='long'?'Buy':'Sell',orderType:'Market',qty:String(parseFloat(qty).toFixed(3)),positionIdx:0});}
 async function apiClosePosition(side,qty){return bPOST('/v5/order/create',{category:CATEGORY,symbol:SYMBOL,side:side==='long'?'Sell':'Buy',orderType:'Market',qty:String(parseFloat(qty).toFixed(3)),reduceOnly:true,positionIdx:0});}
 
