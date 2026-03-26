@@ -27,6 +27,7 @@ const server = http.createServer((req, res) => {
       const body = Buffer.concat(chunks);
       const options = {
         hostname: 'api.bybit.com',
+        port: 443,
         path: target,
         method: req.method,
         headers: {
