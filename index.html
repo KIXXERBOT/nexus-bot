@@ -651,7 +651,9 @@ async function executeOpen(sig){
   const qty=(sizeUsdt*leverage)/entry;
   if(qty<0.001){log('Size too small — increase capital or leverage','W');return;}
   await bPOST('/v5/position/switch-isolated',{category:CATEGORY,symbol:SYMBOL,tradeMode:0,buyLeverage:'10',sellLeverage:'10'});
-  const resp=await apiPlaceOrder(side,qty);
+  const minQty = parseFloat((70 / entry).toFixed(3));
+const finalQty = Math.max(minQty, qty);
+const resp=await apiPlaceOrder(side,finalQty);
   if(resp?.retCode===0){
     log(`ENTERED ${side.toUpperCase()} ${leverage}x @ $${Math.round(entry).toLocaleString()} [${pattern}]`,'G');
     notify(`${side.toUpperCase()} ${leverage}x [${pattern}] ✓`,'G');
