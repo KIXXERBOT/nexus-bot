@@ -380,7 +380,7 @@ async function apiGetKlines(interval, limit=200) {
 }
 
 async function apiGetBalance() {
-  const d = await bGET('/v5/account/wallet-balance', {accountType:'UNIFIED'}, true);
+  const d = await bGET('/v5/account/wallet-balance', {accountType:'CONTRACT'}, true);
   const coin = d?.result?.list?.[0]?.coin?.find(c=>c.coin==='USDT');
   if(!coin) return null;
   return {
