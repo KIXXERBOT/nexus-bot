@@ -334,13 +334,22 @@ async function bybitSignPost(body) {
 
 async function bGET(path, params={}, auth=false) {
   let url = BYBIT_BASE + path;
-  const t0 = Date.now();
   if(auth) {
-    const {sig,ts,recvWindow} = await bybitSign(params);
-    const qs = Object.keys(params).sort().map(k=>k+'='+encodeURIComponent(params[k])).join('&');
-    url += '?' + qs + '&timestamp='+ts+'&recv_window='+recvWindow+'&sign='+sig;
-    const r = await fetch(url, {headers:{'X-BAPI-API-KEY':S.key,'X-BAPI-TIMESTAMP':ts,'X-BAPI-RECV-WINDOW':recvWindow,'X-BAPI-SIGN':sig}});
-    document.getElementById('acc-latency').textContent = (Date.now()-t0)+'ms';
+    const ts = Date.now().toString();
+    const recvWindow = '5000';
+    const qs = Object.keys(params).sort().map(k=>k+'='+params[k]).join('&');
+    const msg = ts + S.key + recvWindow + qs;
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(S.secret), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg));
+    const sigHex = [...new Uint8Array(sig)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    url += '?' + qs;
+    const r = await fetch(url, {headers:{
+      'X-BAPI-API-KEY': S.key,
+      'X-BAPI-TIMESTAMP': ts,
+      'X-BAPI-RECV-WINDOW': recvWindow,
+      'X-BAPI-SIGN': sigHex
+    }});
+    document.getElementById('acc-latency').textContent = 'ok';
     return r.json();
   } else {
     const qs = Object.keys(params).map(k=>k+'='+encodeURIComponent(params[k])).join('&');
