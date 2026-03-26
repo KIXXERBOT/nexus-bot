@@ -327,7 +327,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
 const BYBIT_BASE = '/proxy';
 const SYMBOL = 'BTCUSDT';
 const CATEGORY = 'linear';
-const MIN_NOTIONAL = 70; // Bybit minimum $70
+const MIN_NOTIONAL = 100; // Bybit minimum $100
 
 // Risk Level Profiles — user picks 1-5, bot does the rest
 const RISK_PROFILES = {
@@ -682,7 +682,9 @@ async function executeOpen(sig){
   // Always ensure minimum $70 notional (Bybit requirement)
   const riskUsdt = S.live.balance * S.cfg.risk;
   const calcQty = parseFloat(((riskUsdt * leverage) / entry).toFixed(3));
-  const minQty = parseFloat((MIN_NOTIONAL / entry * 1.05).toFixed(3)); // 5% buffer
+  const minQty = parseFloat((MIN_NOTIONAL / entry).toFixed(3));
+const maxQty = parseFloat((S.live.balance * 0.5 / entry * sig.leverage).toFixed(3));
+const qty = Math.max(minQty, Math.min(calcQty, maxQty)); // 5% buffer
   const qty = Math.max(minQty, calcQty);
   const notional = qty * entry;
 
