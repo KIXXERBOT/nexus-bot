@@ -327,7 +327,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
 const BYBIT_BASE = '/proxy';
 const SYMBOL = 'BTCUSDT';
 const CATEGORY = 'linear';
-const MIN_NOTIONAL = 100; // Bybit minimum $100
+const MIN_NOTIONAL = 100; // Minimum $100 per trade
 
 // Risk Level Profiles — user picks 1-5, bot does the rest
 const RISK_PROFILES = {
@@ -590,7 +590,7 @@ async function doConnect(){
     S.live.peak=S.live.balance;
     S.auto.leverage=RISK_PROFILES[S.riskLevel].maxLev;
     S.auto.tpMult=RISK_PROFILES[S.riskLevel].tpMult;
-    localStorage.setItem('nexus_ai',JSON.stringify({key,sec,cap:S.live.balance,riskLevel:S.riskLevel}));
+    try{ localStorage.setItem('nexus_ai', JSON.stringify({key, sec, cap:S.live.balance, riskLevel:S.riskLevel})); }catch(e){}
     setConn(`✓ Connected — $${bal.available.toFixed(2)} USDT | BTC $${Math.round(price).toLocaleString()}`,'ok');
     await new Promise(r=>setTimeout(r,600));
     showPage('pg-dash');
@@ -682,9 +682,7 @@ async function executeOpen(sig){
   // Always ensure minimum $70 notional (Bybit requirement)
   const riskUsdt = S.live.balance * S.cfg.risk;
   const calcQty = parseFloat(((riskUsdt * leverage) / entry).toFixed(3));
-  const minQty = parseFloat((MIN_NOTIONAL / entry).toFixed(3));
-const maxQty = parseFloat((S.live.balance * 0.5 / entry * sig.leverage).toFixed(3));
-const qty = Math.max(minQty, Math.min(calcQty, maxQty)); // 5% buffer
+  const minQty = parseFloat((MIN_NOTIONAL / entry * 1.05).toFixed(3)); // 5% buffer
   const qty = Math.max(minQty, calcQty);
   const notional = qty * entry;
 
@@ -923,12 +921,15 @@ function setConn(msg,type){const el=document.getElementById('conn-line');el.text
 document.addEventListener('DOMContentLoaded',()=>{
   setRiskLevel(3); // default level 3
   try{
-    const saved=JSON.parse(localStorage.getItem('nexus_ai')||'{}');
-    if(saved.key)document.getElementById('inp-key').value=saved.key;
-    if(saved.sec)document.getElementById('inp-sec').value=saved.sec;
-    if(saved.cap)document.getElementById('inp-cap').value=saved.cap;
-    if(saved.riskLevel)setRiskLevel(saved.riskLevel);
-  }catch(e){}
+    const raw = localStorage.getItem('nexus_ai');
+    if(raw) {
+      const saved = JSON.parse(raw);
+      if(saved.key) document.getElementById('inp-key').value=saved.key;
+      if(saved.sec) document.getElementById('inp-sec').value=saved.sec;
+      if(saved.cap) document.getElementById('inp-cap').value=saved.cap;
+      if(saved.riskLevel) setRiskLevel(parseInt(saved.riskLevel)||3);
+    }
+  }catch(e){ localStorage.removeItem('nexus_ai'); }
 });
 </script>
 </body>
