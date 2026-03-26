@@ -156,6 +156,11 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
           <option value="0.005">0.5% — Safe</option>
           <option value="0.01" selected>1.0% — Standard</option>
           <option value="0.02">2.0% — Aggressive</option>
+<option value="0.05">5%</option>
+<option value="0.10">10%</option>
+<option value="0.20">20%</option>
+<option value="0.30">30%</option>
+<option value="0.50">50%</option>
         </select>
       </div>
       <div class="f">
@@ -279,7 +284,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
 
       <div class="rsect">
         <div class="rtit">Live Settings</div>
-        <div class="sv-row"><span class="sk">Risk/Trade</span><input type="range" min="0.1" max="3" step="0.1" value="1" oninput="liveSet('risk',this.value)"><span class="sv-val" id="sv-risk">1.0%</span></div>
+        <div class="sv-row"><span class="sk">Risk/Trade</span><input type="range" min="0.1" max="50" step="0.5" value="1" oninput="liveSet('risk',this.value)"><span class="sv-val" id="sv-risk">1.0%</span></div>
         <div class="sv-row"><span class="sk">Leverage</span><input type="range" min="3" max="50" step="1" value="10" oninput="liveSet('lev',this.value)"><span class="sv-val" id="sv-lev">10×</span></div>
         <div class="sv-row"><span class="sk">Interval</span><input type="range" min="30" max="120" step="10" value="60" oninput="liveSet('interval',this.value)"><span class="sv-val" id="sv-interval">60s</span></div>
         <div class="sv-row"><span class="sk">TP Mult</span><input type="range" min="1.0" max="4.0" step="0.1" value="1.5" oninput="liveSet('tp',this.value)"><span class="sv-val" id="sv-tp">1.5×</span></div>
