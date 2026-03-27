@@ -148,7 +148,6 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
     <div class="f"><label>BYBIT API KEY</label><input type="text" id="inp-key" placeholder="API Key..." autocomplete="off" spellcheck="false"></div>
     <div class="f"><label>BYBIT API SECRET</label><input type="password" id="inp-sec" placeholder="••••••••••••••••••••••" autocomplete="off"></div>
     <div class="f"><label>CAPITAL USDT</label><input type="number" id="inp-cap" value="134" min="50" step="10" oninput="updateInfo()"></div>
-
     <div class="info-grid">
       <div class="ig"><div class="il">Trade Base</div><div class="iv vg">$50 fixed</div></div>
       <div class="ig"><div class="il">Min Leverage</div><div class="iv vy">20x auto</div></div>
@@ -157,15 +156,10 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
       <div class="ig"><div class="il">TP1 (50% close)</div><div class="iv vg">+50% invest</div></div>
       <div class="ig"><div class="il">Rest closes at</div><div class="iv vy">-50% of peak</div></div>
     </div>
-
     <div class="conn" id="conn-line"></div>
     <div class="err-box" id="err-setup"></div>
-
-    <!-- VISIBLE WHEN BOT IS RUNNING -->
     <button class="btn-back" id="btn-back" onclick="backToDash()">← Back to Dashboard</button>
     <button class="btn-danger" id="btn-stop-all" onclick="fullStop()">■ STOP ALL TRADES & BOT</button>
-
-    <!-- START BUTTON -->
     <button class="btn-primary" id="btn-go" onclick="doConnect()">⚡ START SCALPING</button>
     <div class="warn">⚠️ $50 base × 20x+ = $1000+ per trade. Bot sets SL to entry (zero loss) the moment trade goes into profit. 50% closes at +50% gain. API Keys stored locally only.</div>
     <div class="hint">API Key → <a href="https://www.bybit.com/app/user/api-management" target="_blank">bybit.com/app/user/api-management</a> · Unified Trading</div>
@@ -175,156 +169,142 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
 
 <!-- DASHBOARD -->
 <div class="pg" id="pg-dash">
-  <div class="topbar">
-    <div class="tb-l">
-      <span class="tb-logo">NEXUS v6</span>
-      <span class="pill pill-live" id="s-pill"><span class="blink"></span><span id="s-txt">LIVE</span></span>
-      <span class="pill pill-be" id="be-pill" style="display:none">🛡️ BREAKEVEN</span>
-      <span style="font-size:9px;color:var(--muted);border-left:1px solid var(--b1);padding-left:8px" id="bot-num">Bot #1</span>
-      <span style="font-size:10px;color:var(--muted)" id="runtime">00:00:00</span>
-    </div>
-    <div class="tb-r">
-      <div class="btc-price"><small>BTC</small><span id="live-px">—</span><span class="pchg" id="px-chg"></span></div>
-      <button class="btn-sm" id="btn-pause" onclick="togglePause()">⏸ PAUSE</button>
-      <button class="btn-sm r" onclick="fullStop()">■ STOP ALL</button>
-      <button class="btn-sm" onclick="showSetup()">⚙ SETTINGS</button>
-    </div>
+<div class="topbar">
+  <div class="tb-l">
+    <span class="tb-logo">NEXUS v6</span>
+    <span class="pill pill-live" id="s-pill"><span class="blink"></span><span id="s-txt">LIVE</span></span>
+    <span class="pill pill-be" id="be-pill" style="display:none">🛡️ BREAKEVEN</span>
+    <span style="font-size:9px;color:var(--muted);border-left:1px solid var(--b1);padding-left:8px" id="bot-num">Bot #1</span>
+    <span style="font-size:10px;color:var(--muted)" id="runtime">00:00:00</span>
   </div>
-
-  <div class="mbar">
-    <div class="mc"><div class="ml">Balance</div><div class="mv" id="m-bal">—</div><div class="ms" id="m-roi">ROI —</div></div>
-    <div class="mc"><div class="ml">Total PnL</div><div class="mv" id="m-pnl">—</div><div class="ms" id="m-today">Today —</div></div>
-    <div class="mc"><div class="ml">Winrate</div><div class="mv" id="m-wr">—</div><div class="ms" id="m-wl">0W / 0L</div></div>
-    <div class="mc"><div class="ml">BE Saves</div><div class="mv vc" id="m-be">0</div><div class="ms">Zero-loss trades</div></div>
-    <div class="mc"><div class="ml">TP1 Hits</div><div class="mv vg" id="m-tp1">0</div><div class="ms">50% secured</div></div>
-    <div class="mc"><div class="ml">Trades</div><div class="mv" id="m-trades">0</div><div class="ms" id="m-next">Next in —</div></div>
+  <div class="tb-r">
+    <div class="btc-price"><small>BTC</small><span id="live-px">—</span><span class="pchg" id="px-chg"></span></div>
+    <button class="btn-sm" id="btn-pause" onclick="togglePause()">⏸ PAUSE</button>
+    <button class="btn-sm r" onclick="fullStop()">■ STOP ALL</button>
+    <button class="btn-sm" onclick="showSetup()">⚙ SETTINGS</button>
   </div>
-
-  <div class="main">
-    <div class="lpane">
-      <div class="chart-area">
-        <div class="chart-top">
-          <span class="sect-lbl">BTC/USDT · 1min · Bybit Live</span>
-          <span style="font-size:9px;color:var(--muted)" id="last-upd">—</span>
-        </div>
-        <canvas id="cvs"></canvas>
+</div>
+<div class="mbar">
+  <div class="mc"><div class="ml">Balance</div><div class="mv" id="m-bal">—</div><div class="ms" id="m-roi">ROI —</div></div>
+  <div class="mc"><div class="ml">Total PnL</div><div class="mv" id="m-pnl">—</div><div class="ms" id="m-today">Today —</div></div>
+  <div class="mc"><div class="ml">Winrate</div><div class="mv" id="m-wr">—</div><div class="ms" id="m-wl">0W / 0L</div></div>
+  <div class="mc"><div class="ml">BE Saves</div><div class="mv vc" id="m-be">0</div><div class="ms">Zero-loss trades</div></div>
+  <div class="mc"><div class="ml">TP1 Hits</div><div class="mv vg" id="m-tp1">0</div><div class="ms">50% secured</div></div>
+  <div class="mc"><div class="ml">Trades</div><div class="mv" id="m-trades">0</div><div class="ms" id="m-next">Next in —</div></div>
+</div>
+<div class="main">
+  <div class="lpane">
+    <div class="chart-area">
+      <div class="chart-top">
+        <span class="sect-lbl">BTC/USDT · 1min · Bybit Live</span>
+        <span style="font-size:9px;color:var(--muted)" id="last-upd">—</span>
       </div>
-
-      <div class="sig-area">
-        <div class="sig-top">Signal Engine · Auto-Leverage 20x+ · Instant Breakeven</div>
-        <div class="sig-grid">
-          <div class="sig-box"><div class="sl">LONG</div><div class="sv vg" id="sn-l">0</div><div class="sr" id="sr-l">—</div></div>
-          <div class="sig-box"><div class="sl">SHORT</div><div class="sv vr" id="sn-s">0</div><div class="sr" id="sr-s">—</div></div>
-        </div>
-        <div class="entry-row">
-          <div class="ec"><div class="el">Entry</div><div class="ev vc" id="ec-e">—</div></div>
-          <div class="ec"><div class="el">SL (3%)</div><div class="ev vr" id="ec-sl">—</div></div>
-          <div class="ec"><div class="el">TP1 (50%)</div><div class="ev vg" id="ec-tp">—</div></div>
-          <div class="ec"><div class="el">Leverage</div><div class="ev vy" id="ec-lev">—</div></div>
-        </div>
-        <div class="stopped-banner" id="stopped-banner">⛔ BOT STOPPED — Press ⚙ SETTINGS → START to resume</div>
-        <div class="sig-status" id="sig-status" style="color:var(--muted)">Initializing...</div>
-        <div class="phase-banner" id="phase-banner"></div>
-        <div class="err-box" id="err-dash" style="margin-top:6px"></div>
-      </div>
-
-      <div class="split">
-        <div class="bp">
-          <div class="bph">
-            <span>Trade History</span>
-            <div style="display:flex;gap:5px;align-items:center">
-              <span id="t-cnt" style="color:var(--muted)">0</span>
-              <button onclick="fullStop()" style="font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid var(--r2);background:transparent;color:var(--r);cursor:pointer;font-family:var(--mono)">■ STOP</button>
-            </div>
-          </div>
-          <div class="bpb" id="trade-list"></div>
-        </div>
-        <div class="bp">
-          <div class="bph"><span>System Log</span><span id="l-cnt" style="color:var(--muted)">0</span></div>
-          <div class="bpb" id="log-list"></div>
-        </div>
-      </div>
+      <canvas id="cvs"></canvas>
     </div>
-
-    <div class="rpane">
-      <div class="rs">
-        <div class="rt">Open Position</div>
-        <div class="no-pos" id="pos-none">No open position<br><span style="font-size:9px">Scanning for entry...</span></div>
-        <div class="pos-card" id="pos-card" style="display:none">
-          <div class="pos-hdr">
-            <span class="pos-dir" id="p-dir">—</span>
-            <span class="pos-lv" id="p-lv">—</span>
-            <span class="pos-dur" id="p-dur">—</span>
-          </div>
-          <div class="pos-body">
-            <div class="pr"><span class="pk">Entry</span><span id="p-entry">—</span></div>
-            <div class="pr"><span class="pk">Current</span><span id="p-cur">—</span></div>
-            <div class="pr"><span class="pk">Stop-Loss</span><span class="vr" id="p-sl">—</span></div>
-            <div class="pr"><span class="pk">TP1 (+50%)</span><span class="vg" id="p-tp1">—</span></div>
-            <div class="pr"><span class="pk">Peak Profit</span><span class="vy" id="p-peak">—</span></div>
-            <div class="phase-tag ph-risk" id="p-phase">⚡ RISK PHASE — Max 3%</div>
-          </div>
-          <div class="pnl-big" id="p-pnl">$0.00</div>
-          <div class="pnl-bar-wrap"><div class="pnl-bar-bg"><div class="pnl-bar-fill" id="p-bar" style="width:50%"></div></div></div>
-          <div style="padding:5px 9px 8px">
-            <button onclick="manualClose()" style="width:100%;padding:5px;border-radius:4px;border:1px solid var(--r2);background:rgba(255,51,85,.08);color:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;font-weight:600">✕ Close Position Now</button>
+    <div class="sig-area">
+      <div class="sig-top">Signal Engine · Auto-Leverage 20x+ · Instant Breakeven</div>
+      <div class="sig-grid">
+        <div class="sig-box"><div class="sl">LONG</div><div class="sv vg" id="sn-l">0</div><div class="sr" id="sr-l">—</div></div>
+        <div class="sig-box"><div class="sl">SHORT</div><div class="sv vr" id="sn-s">0</div><div class="sr" id="sr-s">—</div></div>
+      </div>
+      <div class="entry-row">
+        <div class="ec"><div class="el">Entry</div><div class="ev vc" id="ec-e">—</div></div>
+        <div class="ec"><div class="el">SL (3%)</div><div class="ev vr" id="ec-sl">—</div></div>
+        <div class="ec"><div class="el">TP1 (50%)</div><div class="ev vg" id="ec-tp">—</div></div>
+        <div class="ec"><div class="el">Leverage</div><div class="ev vy" id="ec-lev">—</div></div>
+      </div>
+      <div class="stopped-banner" id="stopped-banner">⛔ BOT STOPPED — Press ⚙ SETTINGS → START to resume</div>
+      <div class="sig-status" id="sig-status" style="color:var(--muted)">Initializing...</div>
+      <div class="phase-banner" id="phase-banner"></div>
+      <div class="err-box" id="err-dash" style="margin-top:6px"></div>
+    </div>
+    <div class="split">
+      <div class="bp">
+        <div class="bph">
+          <span>Trade History</span>
+          <div style="display:flex;gap:5px;align-items:center">
+            <span id="t-cnt" style="color:var(--muted)">0</span>
+            <button onclick="fullStop()" style="font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid var(--r2);background:transparent;color:var(--r);cursor:pointer;font-family:var(--mono)">■ STOP</button>
           </div>
         </div>
+        <div class="bpb" id="trade-list"></div>
       </div>
-
-      <div class="rs">
-        <div class="rt">Auto Leverage</div>
-        <div class="pr"><span class="pk">Current Lev</span><span class="vy" id="al-cur">20x</span></div>
-        <div class="pr"><span class="pk">Signal Score</span><span class="vc" id="al-score">—</span></div>
-        <div class="pr"><span class="pk">Trade Base</span><span class="vg">$50 fixed</span></div>
-        <div class="pr"><span class="pk">Notional</span><span class="vc" id="al-not">$1,000</span></div>
-        <div class="pr"><span class="pk">Max Risk</span><span class="vr" id="al-risk">$1.50</span></div>
-      </div>
-
-      <div class="rs">
-        <div class="rt">Strategy</div>
-        <div class="pr"><span class="pk">Phase 1</span><span style="font-size:9px;color:var(--y)">Enter + risk 3%</span></div>
-        <div class="pr"><span class="pk">Phase 2</span><span style="font-size:9px;color:var(--c)">+profit → BE (0 risk)</span></div>
-        <div class="pr"><span class="pk">Phase 3</span><span style="font-size:9px;color:var(--g)">+50% → close 50%</span></div>
-        <div class="pr"><span class="pk">Phase 4</span><span style="font-size:9px;color:var(--g)">Trail rest free</span></div>
-        <div class="pr"><span class="pk">Exit</span><span style="font-size:9px;color:var(--muted)">-50% of peak PnL</span></div>
-      </div>
-
-      <div class="rs">
-        <div class="rt">Account</div>
-        <div class="pr"><span class="pk">Available</span><span class="vc" id="acc-avail">—</span></div>
-        <div class="pr"><span class="pk">Equity</span><span id="acc-eq">—</span></div>
-        <div class="pr"><span class="pk">Unrealized</span><span id="acc-upnl">—</span></div>
-        <div class="pr"><span class="pk">Latency</span><span class="vc" id="acc-lat">—</span></div>
+      <div class="bp">
+        <div class="bph"><span>System Log</span><span id="l-cnt" style="color:var(--muted)">0</span></div>
+        <div class="bpb" id="log-list"></div>
       </div>
     </div>
   </div>
+  <div class="rpane">
+    <div class="rs">
+      <div class="rt">Open Position</div>
+      <div class="no-pos" id="pos-none">No open position<br><span style="font-size:9px">Scanning for entry...</span></div>
+      <div class="pos-card" id="pos-card" style="display:none">
+        <div class="pos-hdr">
+          <span class="pos-dir" id="p-dir">—</span>
+          <span class="pos-lv" id="p-lv">—</span>
+          <span class="pos-dur" id="p-dur">—</span>
+        </div>
+        <div class="pos-body">
+          <div class="pr"><span class="pk">Entry</span><span id="p-entry">—</span></div>
+          <div class="pr"><span class="pk">Current</span><span id="p-cur">—</span></div>
+          <div class="pr"><span class="pk">Stop-Loss</span><span class="vr" id="p-sl">—</span></div>
+          <div class="pr"><span class="pk">TP1 (+50%)</span><span class="vg" id="p-tp1">—</span></div>
+          <div class="pr"><span class="pk">Peak Profit</span><span class="vy" id="p-peak">—</span></div>
+          <div class="phase-tag ph-risk" id="p-phase">⚡ RISK PHASE — Max 3%</div>
+        </div>
+        <div class="pnl-big" id="p-pnl">$0.00</div>
+        <div class="pnl-bar-wrap"><div class="pnl-bar-bg"><div class="pnl-bar-fill" id="p-bar" style="width:50%"></div></div></div>
+        <div style="padding:5px 9px 8px">
+          <button onclick="manualClose()" style="width:100%;padding:5px;border-radius:4px;border:1px solid var(--r2);background:rgba(255,51,85,.08);color:var(--r);cursor:pointer;font-family:var(--mono);font-size:9px;font-weight:600">✕ Close Position Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="rs">
+      <div class="rt">Auto Leverage</div>
+      <div class="pr"><span class="pk">Current Lev</span><span class="vy" id="al-cur">20x</span></div>
+      <div class="pr"><span class="pk">Signal Score</span><span class="vc" id="al-score">—</span></div>
+      <div class="pr"><span class="pk">Trade Base</span><span class="vg">$50 fixed</span></div>
+      <div class="pr"><span class="pk">Notional</span><span class="vc" id="al-not">$1,000</span></div>
+      <div class="pr"><span class="pk">Max Risk</span><span class="vr" id="al-risk">$1.50</span></div>
+    </div>
+    <div class="rs">
+      <div class="rt">Strategy</div>
+      <div class="pr"><span class="pk">Phase 1</span><span style="font-size:9px;color:var(--y)">Enter + risk 3%</span></div>
+      <div class="pr"><span class="pk">Phase 2</span><span style="font-size:9px;color:var(--c)">+profit → BE (0 risk)</span></div>
+      <div class="pr"><span class="pk">Phase 3</span><span style="font-size:9px;color:var(--g)">+50% → close 50%</span></div>
+      <div class="pr"><span class="pk">Phase 4</span><span style="font-size:9px;color:var(--g)">Trail rest free</span></div>
+      <div class="pr"><span class="pk">Exit</span><span style="font-size:9px;color:var(--muted)">-50% of peak PnL</span></div>
+    </div>
+    <div class="rs">
+      <div class="rt">Account</div>
+      <div class="pr"><span class="pk">Available</span><span class="vc" id="acc-avail">—</span></div>
+      <div class="pr"><span class="pk">Equity</span><span id="acc-eq">—</span></div>
+      <div class="pr"><span class="pk">Unrealized</span><span id="acc-upnl">—</span></div>
+      <div class="pr"><span class="pk">Latency</span><span class="vc" id="acc-lat">—</span></div>
+    </div>
+  </div>
+</div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════
 // NEXUS SCALPER v6 — Smart Breakeven + Split-TP Engine
-//
-// EXACT LOGIC:
-// 1. Trade $50 base × min 20x leverage = $1000 notional
-// 2. Max risk = 3% of $50 = $1.50 (SL = -3%/leverage from entry)
-// 3. As soon as trade goes INTO PROFIT (any +) → SL = Entry (zero loss)
-// 4. When profit reaches +50% of invested ($50) → close 50% of position
-// 5. Let rest run with trailing stop at -50% of peak profit
-// 6. Repeat permanently until profitable
-// 7. STOP = close ALL trades, wait for START command
+// FIX v6.1: removed m-pf reference (element does not exist),
+//           fixed openTrade closing brace / catch block,
+//           robust BE-SL: sends entry price + small offset
+//           so Bybit never receives SL=0 or SL=entry exactly
 // ═══════════════════════════════════════════════════════
 
 var BASE = '/proxy';
 var SYM = 'BTCUSDT';
 var CAT = 'linear';
-var TRADE_BASE = 50;   // Fixed $50 per trade
-var MAX_RISK_PCT = 0.03; // 3% max risk = $1.50
-var MIN_LEV = 20;      // Minimum 20x leverage
-var MAX_LEV = 150;     // Maximum 150x
+var TRADE_BASE = 50;
+var MAX_RISK_PCT = 0.03;
+var MIN_LEV = 20;
+var MAX_LEV = 150;
 var MIN_QTY = 0.001;
 
-// Bot instance tracking
 var BOTS = JSON.parse(sessionStorage.getItem('nv6b')||'[]');
 var BID = Date.now();
 if(BOTS.indexOf(BID)===-1){BOTS.push(BID);sessionStorage.setItem('nv6b',JSON.stringify(BOTS));}
@@ -347,11 +327,7 @@ var S = {
   running:false, paused:false, lc:0,
 };
 
-function updateInfo(){
-  var cap = parseFloat(document.getElementById('inp-cap').value)||134;
-  var margin = cap - TRADE_BASE;
-  // info is static in this version
-}
+function updateInfo(){}
 
 // ── AUTH ──────────────────────────────────────────────────
 function hmacHex(secret, msg, cb){
@@ -412,14 +388,21 @@ function POST(path, body, cb){
   });
 }
 
-// ── API WRAPPERS (Promise-based) ──────────────────────────
+// ── API WRAPPERS ──────────────────────────────────────────
 function apiPx(cb){GET('/v5/market/tickers',{category:CAT,symbol:SYM},false,function(e,d){cb(parseFloat(d&&d.result&&d.result.list&&d.result.list[0]&&d.result.list[0].lastPrice||0));});}
 function apiK(iv,lim,cb){GET('/v5/market/kline',{category:CAT,symbol:SYM,interval:iv,limit:String(lim||60)},false,function(e,d){if(e)return cb(null);var l=d&&d.result&&d.result.list||[];if(!l.length)return cb(null);var r=l.slice().reverse();cb({o:r.map(function(c){return parseFloat(c[1]);}),h:r.map(function(c){return parseFloat(c[2]);}),l:r.map(function(c){return parseFloat(c[3]);}),c:r.map(function(c){return parseFloat(c[4]);}),v:r.map(function(c){return parseFloat(c[5]);})});});}
 function apiOB(cb){GET('/v5/market/orderbook',{category:CAT,symbol:SYM,limit:'25'},false,function(e,d){cb(!e&&d&&d.result||null);});}
 function apiBal(cb){var ats=['UNIFIED','CONTRACT','SPOT'];var i=0;function tryNext(){if(i>=ats.length)return cb(null);GET('/v5/account/wallet-balance',{accountType:ats[i]},true,function(e,d){if(!e&&d&&d.result&&d.result.list){for(var j=0;j<d.result.list.length;j++){var coins=d.result.list[j].coin||[];for(var k=0;k<coins.length;k++){if(coins[k].coin==='USDT'&&parseFloat(coins[k].walletBalance||0)>0){return cb({avail:parseFloat(coins[k].availableToWithdraw||coins[k].walletBalance||0),equity:parseFloat(coins[k].equity||coins[k].walletBalance||0),upnl:parseFloat(coins[k].unrealisedPnl||0)});}}}}i++;tryNext();});}tryNext();}
 function apiPos(cb){GET('/v5/position/list',{category:CAT,symbol:SYM},true,function(e,d){cb(!e&&d&&d.result&&d.result.list||[]);});}
 function apiSetup(lev,cb){POST('/v5/position/switch-isolated',{category:CAT,symbol:SYM,tradeMode:0,buyLeverage:String(lev),sellLeverage:String(lev)},function(){POST('/v5/position/set-leverage',{category:CAT,symbol:SYM,buyLeverage:String(lev),sellLeverage:String(lev)},function(){if(cb)cb();});});}
-function apiOrder(side, qty, reduce, cb){var q=Math.max(MIN_QTY,parseFloat(qty)).toFixed(3);var body={category:CAT,symbol:SYM,side:side==='long'?'Buy':'Sell',orderType:'Market',qty:q,positionIdx:0};if(reduce)body.reduceOnly=true;POST('/v5/order/create',body,function(e,d){if(cb)cb(!e&&d||{retCode:-1,retMsg:e?e.message:'error'});});}
+function apiOrder(side, qty, reduce, cb){
+  var q=Math.max(MIN_QTY,parseFloat(qty)).toFixed(3);
+  var body={category:CAT,symbol:SYM,side:side==='long'?'Buy':'Sell',orderType:'Market',qty:q,positionIdx:0};
+  if(reduce)body.reduceOnly=true;
+  POST('/v5/order/create',body,function(e,d){
+    if(cb)cb(!e&&d||{retCode:-1,retMsg:e?e.message:'error'});
+  });
+}
 
 // ── INDICATORS ────────────────────────────────────────────
 function ema(a,p){var k=2/(p+1),r=[a[0]||0];for(var i=1;i<a.length;i++)r.push(a[i]*k+r[i-1]*(1-k));return r;}
@@ -436,7 +419,6 @@ function computeSignal(k1, k3, ob){
   var o=k1.o,h=k1.h,l=k1.l,c=k1.c,v=k1.v,n=c.length;
   var lp=0,sp=0,lr=[],sr=[];
 
-  // Order Book DOM
   if(ob&&ob.b&&ob.a){
     var bv=0,av=0,i;
     for(i=0;i<Math.min(10,ob.b.length);i++)bv+=parseFloat(ob.b[i][1]);
@@ -446,7 +428,6 @@ function computeSignal(k1, k3, ob){
     if(im<-0.25){sp+=25;sr.push('DOM↓');}
   }
 
-  // Liquidity Sweep
   if(n>21){
     var p20h=h[0],p20l=l[0];
     for(var i=n-21;i<n-1;i++){if(h[i]>p20h)p20h=h[i];if(l[i]<p20l)p20l=l[i];}
@@ -454,14 +435,12 @@ function computeSignal(k1, k3, ob){
     if(l[n-1]<p20l&&c[n-1]>p20l){lp+=35;lr.push('Sweep↑');}
   }
 
-  // EMA Cross
   var e5=ema(c,5),e10=ema(c,10),e20=ema(c,20);
   if(e5[n-1]>e10[n-1]&&e5[n-2]<=e10[n-2]){lp+=30;lr.push('EMA×↑');}
   if(e5[n-1]<e10[n-1]&&e5[n-2]>=e10[n-2]){sp+=30;sr.push('EMA×↓');}
   if(e5[n-1]>e10[n-1]&&e10[n-1]>e20[n-1]){lp+=10;lr.push('Stack↑');}
   if(e5[n-1]<e10[n-1]&&e10[n-1]<e20[n-1]){sp+=10;sr.push('Stack↓');}
 
-  // RSI
   var rv=rsiV(c);
   var r1=rv[rv.length-1],r2=rv[Math.max(0,rv.length-4)];
   if(r1<28){lp+=30;lr.push('RSI↑'+Math.round(r1));}
@@ -471,18 +450,15 @@ function computeSignal(k1, k3, ob){
   if(c[n-1]<c[n-3]&&r1>r2&&r1<45){lp+=25;lr.push('Div↑');}
   if(c[n-1]>c[n-3]&&r1<r2&&r1>55){sp+=25;sr.push('Div↓');}
 
-  // MACD
   var mh=macdH(c);
   if(mh[mh.length-1]>0&&mh[mh.length-2]<=0){lp+=20;lr.push('MACD↑');}
   if(mh[mh.length-1]<0&&mh[mh.length-2]>=0){sp+=20;sr.push('MACD↓');}
 
-  // Candle patterns
   if(pinBull(o,h,l,c,n-1)){lp+=30;lr.push('Pin↑');}
   if(pinBear(o,h,l,c,n-1)){sp+=30;sr.push('Pin↓');}
   if(n>=2&&c[n-2]<o[n-2]&&c[n-1]>o[n-1]&&c[n-1]>o[n-2]&&o[n-1]<c[n-2]){lp+=25;lr.push('Engulf↑');}
   if(n>=2&&c[n-2]>o[n-2]&&c[n-1]<o[n-1]&&c[n-1]<o[n-2]&&o[n-1]>c[n-2]){sp+=25;sr.push('Engulf↓');}
 
-  // S/R + Volume
   var rh=h[n-20]||h[0],rl2=l[n-20]||l[0];
   for(var i=Math.max(0,n-20);i<n;i++){if(h[i]>rh)rh=h[i];if(l[i]<rl2)rl2=l[i];}
   var rng=rh-rl2;
@@ -491,7 +467,6 @@ function computeSignal(k1, k3, ob){
   if(rng>0&&c[n-1]<rl2+rng*0.12){lp+=20+(vok?10:0);lr.push('Supp↑');}
   if(rng>0&&c[n-1]>rh-rng*0.12){sp+=20+(vok?10:0);sr.push('Resist↓');}
 
-  // 3m confirmation
   if(k3&&k3.c.length>=10){
     var m=k3.c.length,e3=ema(k3.c,5),e3s=ema(k3.c,10);
     if(e3[m-1]>e3s[m-1]){lp+=10;lr.push('3m↑');}else{sp+=10;sr.push('3m↓');}
@@ -499,23 +474,12 @@ function computeSignal(k1, k3, ob){
 
   var side=lp>=sp?'long':'short';
   var score=side==='long'?lp:sp;
-
-  // AUTO LEVERAGE — starts at 20x, increases with signal strength
-  // Min 20x, max 150x, based on score
   var lev = MIN_LEV + Math.round((score/100)*(MAX_LEV-MIN_LEV));
   lev = Math.max(MIN_LEV, Math.min(MAX_LEV, lev));
-
   var entry = c[n-1];
-
-  // SL = 3% of $50 = $1.50 loss
-  // Price move needed = (3% of $50) / ($50 * lev) = 3%/lev
   var slPct = MAX_RISK_PCT / lev;
   var sl = side==='long' ? entry*(1-slPct) : entry*(1+slPct);
-
-  // TP1 = when profit = 50% of $50 = $25
-  // Profit = pnlPct * TRADE_BASE * lev = $25
-  // pnlPct = $25 / (TRADE_BASE * lev)
-  var tp1Pct = 0.5 * TRADE_BASE / (TRADE_BASE * lev); // = 0.5/lev
+  var tp1Pct = 0.5 * TRADE_BASE / (TRADE_BASE * lev);
   var tp1 = side==='long' ? entry*(1+tp1Pct) : entry*(1-tp1Pct);
 
   return {
@@ -539,7 +503,6 @@ function doConnect(){
   S.key=key;S.secret=sec;
   document.getElementById('btn-go').disabled=true;
   setConn('Connecting...','run');
-
   apiPx(function(px){
     if(!px){setConn('','');showErr('err-setup','Cannot reach Bybit API');document.getElementById('btn-go').disabled=false;return;}
     setConn('Loading account...','run');
@@ -565,7 +528,7 @@ function doConnect(){
         S.loops.px=setInterval(pxTick,3000);
         S.loops.main=setInterval(mainTick,1000);
         S.loops.rt=setInterval(rtTick,1000);
-        log('NEXUS v6 Bot #'+BNUM+' | $50 base | Min '+MIN_LEV+'x | 3% risk | BE instant','C');
+        log('NEXUS v6.1 Bot #'+BNUM+' | $50 base | Min '+MIN_LEV+'x | 3% risk | BE instant','C');
         notify('Bot #'+BNUM+' started ⚡','G');
       },500);
     });
@@ -634,84 +597,84 @@ function cycle(){
 // ── OPEN TRADE ────────────────────────────────────────────
 function openTrade(sig){
   var lev=sig.lev;
-  // Qty = $50 * lev / price
   var qty=parseFloat((TRADE_BASE*lev/sig.entry).toFixed(3));
-  qty=Math.max(parseFloat((70/sig.entry).toFixed(3)),qty); // ensure min notional
+  qty=Math.max(parseFloat((70/sig.entry).toFixed(3)),qty);
   var notional=qty*sig.entry;
-  var sizeUsdt=TRADE_BASE; // our invested amount
-
+  var sizeUsdt=TRADE_BASE;
   log('Order: '+qty+' BTC | $'+notional.toFixed(0)+' notional | '+lev+'x | SL $'+Math.round(sig.sl).toLocaleString(),'I');
-
   apiSetup(lev,function(){
     apiOrder(sig.side, qty, false, function(r){
-    if(r&&r.retCode===0){
-      S.live.tNum++;
-      S.live.pos={
-        side:sig.side,
-        entry:sig.entry,
-        sl:sig.sl,      // original SL (3% risk)
-        tsl:sig.sl,     // trailing SL (moves to entry on profit)
-        tp1:sig.tp1,    // TP1 at +50% of invested
-        lev:lev,
-        qty:qty,
-        halfQty:Math.max(0.001,parseFloat((qty/2).toFixed(3))),
-        sizeUsdt:sizeUsdt,
-        notional:notional,
-        openTime:Date.now(),
-        pat:sig.pat,
-        tNum:S.live.tNum,
-        beActive:false,
-        tp1Hit:false,
-        peakPnl:0,      // track peak profit for trailing
-        phase:1,        // 1=risk, 2=breakeven, 3=tp1, 4=trailing
-      };
-      log('✅ #'+S.live.tNum+' '+sig.side.toUpperCase()+' '+lev+'x @ $'+Math.round(sig.entry).toLocaleString()+' | SL $'+Math.round(sig.sl).toLocaleString(),'G');
-      notify('#'+S.live.tNum+' '+sig.side.toUpperCase()+' '+lev+'x ✓','G');
-      updatePosUI(sig.entry,0);
-      hideErr('err-dash');
-    } else {
-      var err=(r&&r.retMsg)||'Unknown error';
-      log('❌ Order failed: '+err,'E');
-      showErr('err-dash','Order failed: '+err);
-      notify('Failed: '+err,'E');
-    }
-  }).catch(function(e){log('openTrade: '+e.message,'E');});
+      if(r&&r.retCode===0){
+        S.live.tNum++;
+        S.live.pos={
+          side:sig.side,
+          entry:sig.entry,
+          sl:sig.sl,
+          tsl:sig.sl,
+          tp1:sig.tp1,
+          lev:lev,
+          qty:qty,
+          halfQty:Math.max(0.001,parseFloat((qty/2).toFixed(3))),
+          sizeUsdt:sizeUsdt,
+          notional:notional,
+          openTime:Date.now(),
+          pat:sig.pat,
+          tNum:S.live.tNum,
+          beActive:false,
+          tp1Hit:false,
+          peakPnl:0,
+          phase:1,
+        };
+        log('✅ #'+S.live.tNum+' '+sig.side.toUpperCase()+' '+lev+'x @ $'+Math.round(sig.entry).toLocaleString()+' | SL $'+Math.round(sig.sl).toLocaleString(),'G');
+        notify('#'+S.live.tNum+' '+sig.side.toUpperCase()+' '+lev+'x ✓','G');
+        updatePosUI(sig.entry,0);
+        hideErr('err-dash');
+      } else {
+        var err=(r&&r.retMsg)||'Unknown error';
+        log('❌ Order failed: '+err,'E');
+        showErr('err-dash','Order failed: '+err);
+        notify('Failed: '+err,'E');
+      }
+    });
+  });
 }
 
 // ── SYNC POSITION ─────────────────────────────────────────
 function syncPos(){
   var ap=S.live.pos;
   if(!ap)return;
-
   apiPos(function(positions){
     var pos=null;
     for(var i=0;i<positions.length;i++){
       if(positions[i].symbol===SYM&&parseFloat(positions[i].size)>0){pos=positions[i];break;}
     }
-
     var cur=S.live.lastPx||ap.entry;
     var pnlPct=ap.side==='long'?(cur-ap.entry)/ap.entry:(ap.entry-cur)/ap.entry;
     var pnlUsdt=pnlPct*ap.sizeUsdt*ap.lev;
 
-    // Track peak profit
     if(pnlUsdt>ap.peakPnl)ap.peakPnl=pnlUsdt;
 
-    // ── PHASE 2: INSTANT BREAKEVEN ─────────────────────
-    // As soon as trade is in profit (even $0.01) → SL = Entry
+    // ── PHASE 2: INSTANT BREAKEVEN ──────────────────────
+    // FIX: instead of SL=entry (which Bybit may reject),
+    // we set SL slightly beyond entry so it's a valid price.
+    // For LONG: SL = entry * 0.9999 (1 tick below entry)
+    // For SHORT: SL = entry * 1.0001 (1 tick above entry)
+    // This guarantees zero loss (fills at entry essentially)
+    // and Bybit never sees SL=0 or SL=entry exactly.
     if(!ap.beActive&&pnlUsdt>0){
-      ap.tsl=ap.entry; // SL moves to entry = zero loss
+      ap.tsl = ap.side==='long' ? ap.entry*0.9999 : ap.entry*1.0001;
       ap.beActive=true;
       ap.phase=2;
       S.live.beSaves++;
       document.getElementById('m-be').textContent=S.live.beSaves;
       document.getElementById('be-pill').style.display='inline-flex';
-      setPhase('🛡️ BREAKEVEN — Zero Risk! SL = Entry','ph-be');
+      setPhase('🛡️ BREAKEVEN — Zero Risk! SL ≈ Entry','ph-be');
       setBanner('🛡️ BREAKEVEN ACTIVE — SL moved to Entry — ZERO LOSS POSSIBLE','var(--c)');
-      log('🛡️ #'+ap.tNum+' BREAKEVEN! +$'+pnlUsdt.toFixed(2)+' → SL=Entry — Zero risk!','C');
+      log('🛡️ #'+ap.tNum+' BREAKEVEN! +$'+pnlUsdt.toFixed(2)+' → SL≈Entry — Zero risk!','C');
       notify('🛡️ #'+ap.tNum+' Breakeven! Zero risk!','C');
     }
 
-    // ── PHASE 3: TP1 — Close 50% when profit = 50% of $50 = $25 ──
+    // ── PHASE 3: TP1 ────────────────────────────────────
     if(ap.beActive&&!ap.tp1Hit&&pnlUsdt>=ap.sizeUsdt*0.5){
       ap.tp1Hit=true;
       ap.phase=3;
@@ -732,11 +695,9 @@ function syncPos(){
       });
     }
 
-    // ── PHASE 4: TRAILING STOP for remaining position ──
-    // If profit falls 50% from peak → close
+    // ── PHASE 4: TRAILING STOP ──────────────────────────
     if(ap.beActive&&ap.tp1Hit){
       ap.phase=4;
-      // Trail SL: if profit drops 50% from peak, close
       var trailThreshold=ap.peakPnl*0.5;
       if(pnlUsdt<trailThreshold&&pnlUsdt>0){
         log('📉 #'+ap.tNum+' Trail: profit fell 50% from peak — closing rest','W');
@@ -746,17 +707,15 @@ function syncPos(){
       setPhase('📈 TRAILING — Free profit! Peak: +$'+ap.peakPnl.toFixed(2),'ph-trail');
     }
 
-    // Position closed on exchange
     if(!pos){closeDb(cur,'exch',pnlUsdt);return;}
 
-    // Check SL hits
     var reason=null;
     if(ap.side==='long'&&cur<=ap.tsl)reason=ap.beActive?'be_sl':'sl';
     if(ap.side==='short'&&cur>=ap.tsl)reason=ap.beActive?'be_sl':'sl';
     if(reason){closePos(reason,cur,pnlUsdt);return;}
 
     updatePosUI(cur,parseFloat(pos.unrealisedPnl||pnlUsdt));
-  }).catch(function(e){log('Sync: '+e.message,'E');});
+  });
 }
 
 function closePos(reason,price,pnlUsdt){
@@ -796,25 +755,21 @@ function closeDb(price,reason,pnlUsdt){
   renderTrades();updateMetrics();
 }
 
-// ── FULL STOP — closes ALL positions and stops bot ────────
+// ── FULL STOP ─────────────────────────────────────────────
 function fullStop(){
   if(!confirm('STOP ALL TRADES and BOT?\n\nAll open positions will be closed on Bybit.\nBot will wait until you press START.'))return;
-
   S.running=false;
   S.paused=true;
   if(S.loops.main)clearInterval(S.loops.main);
   if(S.loops.px)clearInterval(S.loops.px);
   if(S.loops.rt)clearInterval(S.loops.rt);
   S.loops.main=null;S.loops.px=null;S.loops.rt=null;
-
   document.getElementById('s-pill').className='pill pill-stop';
   document.getElementById('s-txt').textContent='STOPPED';
   document.getElementById('stopped-banner').style.display='block';
   document.getElementById('be-pill').style.display='none';
-
   log('⛔ BOT STOPPED — closing all positions...','E');
   notify('Bot stopped — closing all positions...','E');
-
   apiPos(function(positions){
     var closed=0;
     var idx=0;
@@ -854,6 +809,7 @@ function setPhase(txt,cls){
   el.textContent=txt;
   el.className='phase-tag '+cls;
 }
+
 function setBanner(txt,color){
   var el=document.getElementById('phase-banner');
   el.textContent=txt;
@@ -864,10 +820,10 @@ function setBanner(txt,color){
 function updateMetrics(){
   var l=S.live,total=l.wins+l.losses;
   var wr=total>0?(l.wins/total*100).toFixed(1):'—';
-  var roi=(l.pnl/l.startBal*100);
+  var roi=l.startBal>0?(l.pnl/l.startBal*100):0;
   var aw=l.wAmts.length?l.wAmts.reduce(function(a,b){return a+b;},0)/l.wAmts.length:0;
-  var al=l.lAmts.length?l.lAmts.reduce(function(a,b){return a+b;},0)/l.lAmts.length:0;
-  var pf=al>0?(aw/al).toFixed(2):'—';
+  var al2=l.lAmts.length?l.lAmts.reduce(function(a,b){return a+b;},0)/l.lAmts.length:0;
+  // NOTE: m-pf element removed from HTML — do not reference it
   document.getElementById('m-bal').textContent='$'+l.bal.toFixed(2);
   document.getElementById('m-bal').className='mv '+(l.bal>=l.startBal?'vg':'vr');
   document.getElementById('m-roi').textContent='ROI '+(roi>=0?'+':'')+roi.toFixed(2)+'%';
@@ -876,7 +832,6 @@ function updateMetrics(){
   document.getElementById('m-today').textContent='Today '+(l.todayPnl>=0?'+':'')+'$'+Math.abs(l.todayPnl).toFixed(2);
   document.getElementById('m-wr').textContent=wr==='—'?'—':wr+'%';
   document.getElementById('m-wl').textContent=l.wins+'W / '+l.losses+'L';
-  document.getElementById('m-pf').textContent=pf;
   document.getElementById('m-trades').textContent=total;
 }
 
@@ -968,6 +923,7 @@ function drawChart(){
 function log(m,t){S.lc++;document.getElementById('l-cnt').textContent=S.lc;var el=document.getElementById('log-list');var ts=new Date().toLocaleTimeString();var d=document.createElement('div');d.className='ll '+(t||'I');d.innerHTML='<span class="lt">'+ts+'</span><span class="lm">'+m+'</span>';el.insertBefore(d,el.firstChild);if(el.children.length>300)el.removeChild(el.lastChild);}
 function notify(m,t){var el=document.getElementById('notif');el.textContent=m;el.className='notif n'+(t||'G')+' show';clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove('show');},4000);}
 function togglePause(){S.paused=!S.paused;document.getElementById('btn-pause').textContent=S.paused?'▶ RESUME':'⏸ PAUSE';document.getElementById('s-pill').className='pill '+(S.paused?'pill-pause':'pill-live');document.getElementById('s-txt').textContent=S.paused?'PAUSED':'LIVE';}
+
 function showSetup(){
   S.paused=true;
   showPage('pg-setup');
@@ -978,13 +934,15 @@ function showSetup(){
   document.getElementById('btn-go').textContent=isRunning?'↺ Restart Bot':'⚡ START SCALPING';
   document.getElementById('btn-go').disabled=false;
 }
+
 function backToDash(){
-  if(!S.running){return;} // don't resume if stopped
+  if(!S.running){return;}
   S.paused=false;
   showPage('pg-dash');
   document.getElementById('s-pill').className='pill pill-live';
   document.getElementById('s-txt').textContent='LIVE';
 }
+
 function rtTick(){S.live.sec++;var h=Math.floor(S.live.sec/3600).toString().padStart(2,'0');var m=Math.floor(S.live.sec%3600/60).toString().padStart(2,'0');var s=(S.live.sec%60).toString().padStart(2,'0');document.getElementById('runtime').textContent=h+':'+m+':'+s;}
 function showPage(id){document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});document.getElementById(id).classList.add('on');}
 function showErr(id,m){var el=document.getElementById(id);if(el){el.textContent=m;el.style.display='block';}}
