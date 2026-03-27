@@ -413,13 +413,13 @@ function POST(path, body, cb){
 }
 
 // ── API WRAPPERS (Promise-based) ──────────────────────────
-function apiPx(){return new Promise(function(res,rej){GET('/v5/market/tickers',{category:CAT,symbol:SYM},false,function(e,d){if(e)return rej(e);res(parseFloat(d&&d.result&&d.result.list&&d.result.list[0]&&d.result.list[0].lastPrice||0));});});}
-function apiK(iv,lim){return new Promise(function(res,rej){GET('/v5/market/kline',{category:CAT,symbol:SYM,interval:iv,limit:String(lim||60)},false,function(e,d){if(e)return res(null);var l=d&&d.result&&d.result.list||[];if(!l.length)return res(null);var r=[...l].reverse();res({o:r.map(function(c){return parseFloat(c[1]);}),h:r.map(function(c){return parseFloat(c[2]);}),l:r.map(function(c){return parseFloat(c[3]);}),c:r.map(function(c){return parseFloat(c[4]);}),v:r.map(function(c){return parseFloat(c[5]);})});});});}
-function apiOB(){return new Promise(function(res){GET('/v5/market/orderbook',{category:CAT,symbol:SYM,limit:'25'},false,function(e,d){res(!e&&d&&d.result||null);});});}
-function apiBal(){return new Promise(function(res){var ats=['UNIFIED','CONTRACT','SPOT'];var i=0;function tryNext(){if(i>=ats.length)return res(null);GET('/v5/account/wallet-balance',{accountType:ats[i]},true,function(e,d){if(!e&&d&&d.result&&d.result.list){for(var j=0;j<d.result.list.length;j++){var coins=d.result.list[j].coin||[];for(var k=0;k<coins.length;k++){if(coins[k].coin==='USDT'&&parseFloat(coins[k].walletBalance||0)>0){return res({avail:parseFloat(coins[k].availableToWithdraw||coins[k].walletBalance||0),equity:parseFloat(coins[k].equity||coins[k].walletBalance||0),upnl:parseFloat(coins[k].unrealisedPnl||0)});}}}}i++;tryNext();});}tryNext();});}
-function apiPos(){return new Promise(function(res){GET('/v5/position/list',{category:CAT,symbol:SYM},true,function(e,d){res(!e&&d&&d.result&&d.result.list||[]);});});}
-function apiSetup(lev){return new Promise(function(res){POST('/v5/position/switch-isolated',{category:CAT,symbol:SYM,tradeMode:0,buyLeverage:String(lev),sellLeverage:String(lev)},function(){POST('/v5/position/set-leverage',{category:CAT,symbol:SYM,buyLeverage:String(lev),sellLeverage:String(lev)},function(){res();});});});}
-function apiOrder(side, qty, reduce){return new Promise(function(res){var q=Math.max(MIN_QTY,parseFloat(qty)).toFixed(3);var body={category:CAT,symbol:SYM,side:side==='long'?'Buy':'Sell',orderType:'Market',qty:q,positionIdx:0};if(reduce)body.reduceOnly=true;POST('/v5/order/create',body,function(e,d){res(!e&&d||{retCode:-1,retMsg:e?e.message:'error'});});});}
+function apiPx(cb){GET('/v5/market/tickers',{category:CAT,symbol:SYM},false,function(e,d){cb(parseFloat(d&&d.result&&d.result.list&&d.result.list[0]&&d.result.list[0].lastPrice||0));});}
+function apiK(iv,lim,cb){GET('/v5/market/kline',{category:CAT,symbol:SYM,interval:iv,limit:String(lim||60)},false,function(e,d){if(e)return cb(null);var l=d&&d.result&&d.result.list||[];if(!l.length)return cb(null);var r=l.slice().reverse();cb({o:r.map(function(c){return parseFloat(c[1]);}),h:r.map(function(c){return parseFloat(c[2]);}),l:r.map(function(c){return parseFloat(c[3]);}),c:r.map(function(c){return parseFloat(c[4]);}),v:r.map(function(c){return parseFloat(c[5]);})});});}
+function apiOB(cb){GET('/v5/market/orderbook',{category:CAT,symbol:SYM,limit:'25'},false,function(e,d){cb(!e&&d&&d.result||null);});}
+function apiBal(cb){var ats=['UNIFIED','CONTRACT','SPOT'];var i=0;function tryNext(){if(i>=ats.length)return cb(null);GET('/v5/account/wallet-balance',{accountType:ats[i]},true,function(e,d){if(!e&&d&&d.result&&d.result.list){for(var j=0;j<d.result.list.length;j++){var coins=d.result.list[j].coin||[];for(var k=0;k<coins.length;k++){if(coins[k].coin==='USDT'&&parseFloat(coins[k].walletBalance||0)>0){return cb({avail:parseFloat(coins[k].availableToWithdraw||coins[k].walletBalance||0),equity:parseFloat(coins[k].equity||coins[k].walletBalance||0),upnl:parseFloat(coins[k].unrealisedPnl||0)});}}}}i++;tryNext();});}tryNext();}
+function apiPos(cb){GET('/v5/position/list',{category:CAT,symbol:SYM},true,function(e,d){cb(!e&&d&&d.result&&d.result.list||[]);});}
+function apiSetup(lev,cb){POST('/v5/position/switch-isolated',{category:CAT,symbol:SYM,tradeMode:0,buyLeverage:String(lev),sellLeverage:String(lev)},function(){POST('/v5/position/set-leverage',{category:CAT,symbol:SYM,buyLeverage:String(lev),sellLeverage:String(lev)},function(){if(cb)cb();});});}
+function apiOrder(side, qty, reduce, cb){var q=Math.max(MIN_QTY,parseFloat(qty)).toFixed(3);var body={category:CAT,symbol:SYM,side:side==='long'?'Buy':'Sell',orderType:'Market',qty:q,positionIdx:0};if(reduce)body.reduceOnly=true;POST('/v5/order/create',body,function(e,d){if(cb)cb(!e&&d||{retCode:-1,retMsg:e?e.message:'error'});});}
 
 // ── INDICATORS ────────────────────────────────────────────
 function ema(a,p){var k=2/(p+1),r=[a[0]||0];for(var i=1;i<a.length;i++)r.push(a[i]*k+r[i-1]*(1-k));return r;}
@@ -540,46 +540,42 @@ function doConnect(){
   document.getElementById('btn-go').disabled=true;
   setConn('Connecting...','run');
 
-  apiPx().then(function(px){
-    if(!px)throw new Error('Cannot reach Bybit API');
+  apiPx(function(px){
+    if(!px){setConn('','');showErr('err-setup','Cannot reach Bybit API');document.getElementById('btn-go').disabled=false;return;}
     setConn('Loading account...','run');
-    return apiBal();
-  }).then(function(bal){
-    if(!bal)throw new Error('No account data — check API permissions.');
-    if(bal.avail<50)throw new Error('Balance too low: $'+bal.avail.toFixed(2));
-    S.live.bal=Math.min(cap,bal.avail);
-    S.live.startBal=S.live.bal;
-    S.live.peak=S.live.bal;
-    try{localStorage.setItem('nv6',JSON.stringify({key:key,sec:sec,cap:S.live.bal}));}catch(e){}
-    setConn('✓ $'+bal.avail.toFixed(2)+' USDT | BTC loading... | Min '+MIN_LEV+'x','ok');
-    setTimeout(function(){
-      showPage('pg-dash');
-      S.running=true;
-      S.paused=false;
-      S.live.prices=[S.live.lastPx||1,S.live.lastPx||1];
-      document.getElementById('bot-num').textContent='Bot #'+BNUM;
-      document.getElementById('stopped-banner').style.display='none';
-      updateBal(bal);updateMetrics();
-      if(S.loops.px)clearInterval(S.loops.px);
-      if(S.loops.main)clearInterval(S.loops.main);
-      if(S.loops.rt)clearInterval(S.loops.rt);
-      S.loops.px=setInterval(pxTick,3000);
-      S.loops.main=setInterval(mainTick,1000);
-      S.loops.rt=setInterval(rtTick,1000);
-      log('NEXUS v6 Bot #'+BNUM+' started | $50 base | Min '+MIN_LEV+'x | 3% risk | BE instant','C');
-      notify('Bot #'+BNUM+' started ⚡','G');
-    },500);
-  }).catch(function(e){
-    setConn('','');
-    showErr('err-setup',e.message);
-    document.getElementById('btn-go').disabled=false;
+    apiBal(function(bal){
+      if(!bal){setConn('','');showErr('err-setup','No account data — check API permissions.');document.getElementById('btn-go').disabled=false;return;}
+      if(bal.avail<50){setConn('','');showErr('err-setup','Balance too low: $'+bal.avail.toFixed(2));document.getElementById('btn-go').disabled=false;return;}
+      S.live.bal=Math.min(cap,bal.avail);
+      S.live.startBal=S.live.bal;
+      S.live.peak=S.live.bal;
+      try{localStorage.setItem('nv6',JSON.stringify({key:key,sec:sec,cap:S.live.bal}));}catch(e){}
+      setConn('✓ $'+bal.avail.toFixed(2)+' USDT | BTC loading... | Min '+MIN_LEV+'x','ok');
+      setTimeout(function(){
+        showPage('pg-dash');
+        S.running=true;
+        S.paused=false;
+        S.live.prices=[1,1];
+        document.getElementById('bot-num').textContent='Bot #'+BNUM;
+        document.getElementById('stopped-banner').style.display='none';
+        updateBal(bal);updateMetrics();
+        if(S.loops.px)clearInterval(S.loops.px);
+        if(S.loops.main)clearInterval(S.loops.main);
+        if(S.loops.rt)clearInterval(S.loops.rt);
+        S.loops.px=setInterval(pxTick,3000);
+        S.loops.main=setInterval(mainTick,1000);
+        S.loops.rt=setInterval(rtTick,1000);
+        log('NEXUS v6 Bot #'+BNUM+' | $50 base | Min '+MIN_LEV+'x | 3% risk | BE instant','C');
+        notify('Bot #'+BNUM+' started ⚡','G');
+      },500);
+    });
   });
 }
 
 // ── PRICE TICK ────────────────────────────────────────────
 function pxTick(){
   if(!S.running)return;
-  apiPx().then(function(p){
+  apiPx(function(p){
     if(!p)return;
     S.live.prevPx=S.live.lastPx;
     S.live.lastPx=p;
@@ -591,7 +587,7 @@ function pxTick(){
     el.textContent=(chg>=0?'+':'')+chg.toFixed(3)+'%';
     el.style.color=chg>=0?'var(--g)':'var(--r)';
     drawChart();
-  }).catch(function(){});
+  });
 }
 
 // ── MAIN TICK ─────────────────────────────────────────────
@@ -608,31 +604,31 @@ function cycle(){
   document.getElementById('sig-status').textContent='Scanning optimal entry...';
   document.getElementById('sig-status').style.color='var(--c)';
   document.getElementById('last-upd').textContent=new Date().toLocaleTimeString();
-
-  Promise.all([apiK('1',60),apiK('3',30),apiOB()]).then(function(results){
-    var k1=results[0],k3=results[1],ob=results[2];
-    if(!k1){log('Kline error','E');return;}
-    var sig=computeSignal(k1,k3,ob);
-    if(!sig){log('Signal error','E');return;}
-
-    document.getElementById('sn-l').textContent=sig.lScore;
-    document.getElementById('sn-s').textContent=sig.sScore;
-    document.getElementById('sr-l').textContent=sig.lR;
-    document.getElementById('sr-s').textContent=sig.sR;
-    document.getElementById('ec-e').textContent='$'+Math.round(sig.entry).toLocaleString();
-    document.getElementById('ec-sl').textContent='$'+Math.round(sig.sl).toLocaleString();
-    document.getElementById('ec-tp').textContent='$'+Math.round(sig.tp1).toLocaleString();
-    document.getElementById('ec-lev').textContent=sig.lev+'x';
-    document.getElementById('al-cur').textContent=sig.lev+'x';
-    document.getElementById('al-score').textContent=sig.score;
-    document.getElementById('al-not').textContent='$'+(TRADE_BASE*sig.lev).toLocaleString();
-    document.getElementById('al-risk').textContent='$'+(TRADE_BASE*MAX_RISK_PCT).toFixed(2);
-
-    document.getElementById('sig-status').textContent=sig.side.toUpperCase()+' '+sig.lev+'x | '+sig.pat+' | Score '+sig.score;
-    document.getElementById('sig-status').style.color=sig.side==='long'?'var(--g)':'var(--r)';
-    log('ENTRY: '+sig.side.toUpperCase()+' '+sig.lev+'x | '+sig.pat+' | Score '+sig.score,'G');
-    openTrade(sig);
-  }).catch(function(e){log('Cycle: '+e.message,'E');});
+  apiK('1',60,function(k1){
+    if(!k1){log('Kline 1m error','E');return;}
+    apiK('3',30,function(k3){
+      apiOB(function(ob){
+        var sig=computeSignal(k1,k3,ob);
+        if(!sig){log('Signal error','E');return;}
+        document.getElementById('sn-l').textContent=sig.lScore;
+        document.getElementById('sn-s').textContent=sig.sScore;
+        document.getElementById('sr-l').textContent=sig.lR;
+        document.getElementById('sr-s').textContent=sig.sR;
+        document.getElementById('ec-e').textContent='$'+Math.round(sig.entry).toLocaleString();
+        document.getElementById('ec-sl').textContent='$'+Math.round(sig.sl).toLocaleString();
+        document.getElementById('ec-tp').textContent='$'+Math.round(sig.tp1).toLocaleString();
+        document.getElementById('ec-lev').textContent=sig.lev+'x';
+        document.getElementById('al-cur').textContent=sig.lev+'x';
+        document.getElementById('al-score').textContent=sig.score;
+        document.getElementById('al-not').textContent='$'+(TRADE_BASE*sig.lev).toLocaleString();
+        document.getElementById('al-risk').textContent='$'+(TRADE_BASE*MAX_RISK_PCT).toFixed(2);
+        document.getElementById('sig-status').textContent=sig.side.toUpperCase()+' '+sig.lev+'x | '+sig.pat+' | Score '+sig.score;
+        document.getElementById('sig-status').style.color=sig.side==='long'?'var(--g)':'var(--r)';
+        log('ENTRY: '+sig.side.toUpperCase()+' '+sig.lev+'x | '+sig.pat+' | Score '+sig.score,'G');
+        openTrade(sig);
+      });
+    });
+  });
 }
 
 // ── OPEN TRADE ────────────────────────────────────────────
@@ -646,9 +642,8 @@ function openTrade(sig){
 
   log('Order: '+qty+' BTC | $'+notional.toFixed(0)+' notional | '+lev+'x | SL $'+Math.round(sig.sl).toLocaleString(),'I');
 
-  apiSetup(lev).then(function(){
-    return apiOrder(sig.side, qty, false);
-  }).then(function(r){
+  apiSetup(lev,function(){
+    apiOrder(sig.side, qty, false, function(r){
     if(r&&r.retCode===0){
       S.live.tNum++;
       S.live.pos={
@@ -688,8 +683,7 @@ function syncPos(){
   var ap=S.live.pos;
   if(!ap)return;
 
-  Promise.all([apiPos()]).then(function(results){
-    var positions=results[0];
+  apiPos(function(positions){
     var pos=null;
     for(var i=0;i<positions.length;i++){
       if(positions[i].symbol===SYM&&parseFloat(positions[i].size)>0){pos=positions[i];break;}
@@ -723,7 +717,7 @@ function syncPos(){
       ap.phase=3;
       S.live.tp1hits++;
       document.getElementById('m-tp1').textContent=S.live.tp1hits;
-      apiOrder(ap.side,ap.halfQty,true).then(function(r){
+      apiOrder(ap.side,ap.halfQty,true,function(r){
         if(r&&r.retCode===0){
           var halfPnl=pnlUsdt/2;
           S.live.pnl+=halfPnl;S.live.todayPnl+=halfPnl;
@@ -767,11 +761,11 @@ function syncPos(){
 
 function closePos(reason,price,pnlUsdt){
   var ap=S.live.pos;if(!ap)return;
-  apiOrder(ap.side,ap.qty,true).then(function(r){
+  apiOrder(ap.side,ap.qty,true,function(r){
     if(r&&r.retCode===0)log('Close confirmed','G');
     else log('Close err: '+(r&&r.retMsg||''),'E');
     closeDb(price,reason,pnlUsdt);
-  }).catch(function(e){log('Close: '+e.message,'E');closeDb(price,reason,pnlUsdt);});
+  });
 }
 
 function manualClose(){
@@ -798,7 +792,7 @@ function closeDb(price,reason,pnlUsdt){
   document.getElementById('pos-card').style.display='none';
   document.getElementById('be-pill').style.display='none';
   document.getElementById('phase-banner').style.display='none';
-  apiBal().then(function(b){if(b){S.live.bal=b.avail;S.live.peak=Math.max(S.live.peak,b.avail);updateBal(b);}}).catch(function(){});
+  apiBal(function(b){if(b){S.live.bal=b.avail;S.live.peak=Math.max(S.live.peak,b.avail);updateBal(b);}});
   renderTrades();updateMetrics();
 }
 
@@ -821,33 +815,37 @@ function fullStop(){
   log('⛔ BOT STOPPED — closing all positions...','E');
   notify('Bot stopped — closing all positions...','E');
 
-  apiPos().then(function(positions){
+  apiPos(function(positions){
     var closed=0;
-    var promises=positions.map(function(pos){
+    var idx=0;
+    function closeNext(){
+      if(idx>=positions.length){
+        if(S.live.pos){
+          var ap=S.live.pos;
+          var cur=S.live.lastPx||ap.entry;
+          var pct=ap.side==='long'?(cur-ap.entry)/ap.entry:(ap.entry-cur)/ap.entry;
+          closeDb(cur,'stop',pct*ap.sizeUsdt*ap.lev);
+        }
+        notify(closed+' position(s) closed. Bot stopped. ✓','E');
+        log('⛔ '+closed+' position(s) closed. Bot stopped. Press START to resume.','E');
+        document.getElementById('pos-none').style.display='block';
+        document.getElementById('pos-card').style.display='none';
+        document.getElementById('m-next').textContent='STOPPED';
+        apiBal(function(b){if(b)updateBal(b);});
+        return;
+      }
+      var pos=positions[idx++];
       if(parseFloat(pos.size)>0){
         var side=pos.side==='Buy'?'long':'short';
-        return apiOrder(side,parseFloat(pos.size),true).then(function(r){
+        apiOrder(side,parseFloat(pos.size),true,function(r){
           if(r&&r.retCode===0){closed++;log('Closed: '+pos.symbol+' '+pos.side+' '+pos.size,'G');}
           else{log('Close err: '+(r&&r.retMsg||''),'E');}
+          closeNext();
         });
-      }
-      return Promise.resolve();
-    });
-    return Promise.all(promises).then(function(){return closed;});
-  }).then(function(closed){
-    if(S.live.pos){
-      var ap=S.live.pos;
-      var cur=S.live.lastPx||ap.entry;
-      var pct=ap.side==='long'?(cur-ap.entry)/ap.entry:(ap.entry-cur)/ap.entry;
-      closeDb(cur,'stop',pct*ap.sizeUsdt*ap.lev);
+      } else {closeNext();}
     }
-    notify(closed+' position(s) closed. Bot stopped. ✓','E');
-    log('⛔ '+closed+' position(s) closed. Bot stopped. Press START to resume.','E');
-    document.getElementById('pos-none').style.display='block';
-    document.getElementById('pos-card').style.display='none';
-    document.getElementById('m-next').textContent='STOPPED';
-    return apiBal();
-  }).then(function(b){if(b)updateBal(b);}).catch(function(e){log('Stop error: '+e.message,'E');});
+    closeNext();
+  });
 }
 
 // ── UI ─────────────────────────────────────────────────────
