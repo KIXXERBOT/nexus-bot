@@ -894,8 +894,8 @@ function renderTrades(){
 }
 function drawChart(){
   const cv=document.getElementById('cvs');const cx=cv.getContext('2d');
-  const W=cv.offsetWidth,H=120;cv.width=W;cv.height=H;
-  const pr=S.live.prices;if(pr.length<2){cx.fillStyle='#0e1520';cx.fillRect(0,0,W,H);return;}
+  const W=cv.offsetWidth||800;const H=120;cv.width=W;cv.height=H;
+  const pr=S.live.prices;if(pr.length<2){cx.fillStyle='#0e1520';cx.fillRect(0,0,W,H);cx.fillStyle='#4a6272';cx.font='11px IBM Plex Mono';cx.fillText('Loading BTC price...',W/2-70,H/2);return;}
   const mn=Math.min(...pr)*.9997,mx=Math.max(...pr)*1.0003,rng=mx-mn||1;
   const px=i=>i/(pr.length-1)*(W-1),py=v=>H-(v-mn)/rng*(H-8)-4;
   cx.fillStyle='#0e1520';cx.fillRect(0,0,W,H);
