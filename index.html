@@ -597,8 +597,10 @@ function cycle(){
 // ── OPEN TRADE ────────────────────────────────────────────
 function openTrade(sig){
   var lev=sig.lev;
+  // FIX v6.2: removed min-notional override ($70) that caused margin errors.
+  // Qty is purely: TRADE_BASE * lev / price → margin = TRADE_BASE = $50 always.
   var qty=parseFloat((TRADE_BASE*lev/sig.entry).toFixed(3));
-  qty=Math.max(parseFloat((70/sig.entry).toFixed(3)),qty);
+  if(qty<MIN_QTY)qty=MIN_QTY;
   var notional=qty*sig.entry;
   var sizeUsdt=TRADE_BASE;
   log('Order: '+qty+' BTC | $'+notional.toFixed(0)+' notional | '+lev+'x | SL $'+Math.round(sig.sl).toLocaleString(),'I');
