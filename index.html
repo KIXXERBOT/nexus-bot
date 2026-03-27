@@ -151,7 +151,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
     <div class="card-header">BYBIT API — BREAKEVEN SPLIT-TP ENGINE</div>
     <div class="f"><label>BYBIT API KEY</label><input type="text" id="inp-key" placeholder="API Key..." autocomplete="off" spellcheck="false"></div>
     <div class="f"><label>BYBIT API SECRET</label><input type="password" id="inp-sec" placeholder="••••••••••••••••••••••" autocomplete="off"></div>
-    <div class="f"><label>CAPITAL USDT</label><input type="number" id="inp-cap" value="300" min="150" step="50" oninput="updateInfo()"></div>
+    <div class="f"><label>CAPITAL USDT</label><input type="number" id="inp-cap" value="134" min="50" step="50" oninput="updateInfo()"></div>
     <div class="f">
       <label>RISK LEVEL (= Leverage)</label>
       <div class="risk-levels">
@@ -321,7 +321,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
 const BASE = '/proxy';
 const SYM = 'BTCUSDT';
 const CAT = 'linear';
-const TRADE_BASE = 100;   // Fixed $100 per trade
+const TRADE_BASE = 70;   // Fixed $100 per trade
 const MAX_LOSS = 0.05;    // 5% = $5 max loss
 const BE_PCT = 0.003;     // +0.3% triggers breakeven
 const TP1_PCT = 0.005;    // +0.5% triggers TP1 (50% close)
@@ -526,7 +526,7 @@ async function doConnect(){
   hideErr('err-setup');
   if(!key||key.length<8){showErr('err-setup','API Key missing');return;}
   if(!sec||sec.length<8){showErr('err-setup','API Secret missing');return;}
-  if(!cap||cap<150){showErr('err-setup','Min $150 capital');return;}
+  if(!cap||cap<50){showErr('err-setup','Min $50 capital');return;}
   S.key=key;S.secret=sec;S.lev=LEV[S.rl];
   document.getElementById('btn-go').disabled=true;
   setConn('Connecting...','run');
