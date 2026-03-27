@@ -162,6 +162,7 @@ html,body{background:var(--bg0);color:var(--text);font-family:var(--mono);font-s
     <div class="conn-line" id="conn-line"></div>
     <div class="api-err" id="api-err-setup"></div>
     <button class="btn-back" id="btn-back" onclick="backToDash()">← Back to Dashboard</button>
+    <button class="btn-back" id="btn-stop-all" onclick="emergencyStop()" style="display:none;background:rgba(255,51,85,.1);color:var(--r);border-color:var(--r2)">■ STOP ALL TRADES &amp; BOT</button>
     <button class="btn-go" id="btn-go" onclick="doConnect()">⚡ CONNECT & START</button>
     <div class="warn-chip">⚠️ Live trading with real money on Bybit Futures. Bot auto-calculates leverage, TP, SL. Breakeven at +0.3% = zero risk. API Keys stored locally only.</div>
     <div class="hint">API Key → <a href="https://www.bybit.com/app/user/api-management" target="_blank">bybit.com/app/user/api-management</a> · Unified Trading</div>
@@ -845,14 +846,49 @@ function drawChart(){
 function log(m,t){S.lc++;document.getElementById('l-cnt').textContent=S.lc;var el=document.getElementById('log-list');var ts=new Date().toLocaleTimeString();var d=document.createElement('div');d.className='ll '+(t||'I');d.innerHTML='<span class="lt">'+ts+'</span><span class="lm">'+m+'</span>';el.insertBefore(d,el.firstChild);if(el.children.length>300)el.removeChild(el.lastChild);}
 function notify(m,t){var el=document.getElementById('notif');el.textContent=m;el.className='notif n'+(t||'G')+' show';clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove('show');},4000);}
 function togglePause(){S.paused=!S.paused;document.getElementById('btn-pause').textContent=S.paused?'▶ RESUME':'⏸ PAUSE';document.getElementById('s-pill').className='pill '+(S.paused?'pill-pause':'pill-live');document.getElementById('s-txt').textContent=S.paused?'PAUSED':'LIVE';}
-function emergencyStop(){if(!confirm('STOP bot?\nClose positions manually on Bybit!'))return;S.running=false;Object.values(S.loops).forEach(function(l){if(l)clearInterval(l);});document.getElementById('s-pill').className='pill pill-stop';document.getElementById('s-txt').textContent='STOPPED';log('STOPPED','E');}
+async function emergencyStop(){
+  if(!confirm('STOP bot and close ALL positions on Bybit?'))return;
+  S.running=false;
+  S.paused=true;
+  Object.values(S.loops).forEach(function(l){if(l)clearInterval(l);});
+  document.getElementById('s-pill').className='pill pill-stop';
+  document.getElementById('s-txt').textContent='STOPPED';
+  log('STOPPED — closing all positions...','E');
+  try{
+    var positions=await apiPos();
+    for(var pos of positions){
+      if(parseFloat(pos.size)>0){
+        var side=pos.side==='Buy'?'long':'short';
+        await apiOrder(side,parseFloat(pos.size),true);
+        log('Closed: '+pos.symbol+' '+pos.side,'G');
+      }
+    }
+    S.live.pos=null;
+    document.getElementById('pos-none').style.display='block';
+    document.getElementById('pos-card').style.display='none';
+    notify('Bot stopped — all positions closed ✓','E');
+    log('All positions closed','G');
+  }catch(e){log('CloseAll error: '+e.message,'E');}
+}
 function showSetup(){
   S.paused=true;showPage('pg-setup');
   if(S.key)document.getElementById('inp-key').value=S.key;
-  document.getElementById('btn-back').style.display=S.running?'block':'none';
-  if(S.running)document.getElementById('btn-go').textContent='↺ Restart Bot';
+  var isRunning=S.running;
+  document.getElementById('btn-back').style.display=isRunning?'block':'none';
+  document.getElementById('btn-stop-all').style.display=isRunning?'block':'none';
+  if(isRunning)document.getElementById('btn-go').textContent='↺ Restart Bot';
+  else document.getElementById('btn-go').textContent='⚡ CONNECT & START';
 }
-function backToDash(){S.paused=false;showPage('pg-dash');document.getElementById('s-pill').className='pill pill-live';document.getElementById('s-txt').textContent='LIVE';}
+function backToDash(){
+  if(!S.running){
+    showPage('pg-dash');
+    return;
+  }
+  S.paused=false;
+  showPage('pg-dash');
+  document.getElementById('s-pill').className='pill pill-live';
+  document.getElementById('s-txt').textContent='LIVE';
+}
 function rtTick(){S.live.sec++;var h=Math.floor(S.live.sec/3600).toString().padStart(2,'0');var m=Math.floor(S.live.sec%3600/60).toString().padStart(2,'0');var s=(S.live.sec%60).toString().padStart(2,'0');document.getElementById('runtime').textContent=h+':'+m+':'+s;}
 function showPage(id){document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on');});document.getElementById(id).classList.add('on');}
 function showErr(id,m){var el=document.getElementById(id);if(el){el.textContent=m;el.style.display='block';}}
