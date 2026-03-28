@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -168,6 +169,20 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
   <div class="field-group">
     <div class="field-label">Max gleichzeitige Trades</div>
     <input type="number" id="maxTrades" class="field-input" value="3" min="1" max="10">
+  </div>
+
+  <div class="divider"></div>
+
+  <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⚠️ Konto-Schutz (optional)</div>
+  <div class="field-group">
+    <div class="field-label">Warn-Limit % (keine neuen Trades)</div>
+    <input type="number" id="warnLoss" class="field-input" value="10" min="0" max="100">
+    <div class="field-note">0 = deaktiviert</div>
+  </div>
+  <div class="field-group">
+    <div class="field-label">Stop-Limit % (Bot stoppt)</div>
+    <input type="number" id="stopLoss2" class="field-input" value="20" min="0" max="100">
+    <div class="field-note">0 = deaktiviert</div>
   </div>
 
   <div class="field-group">
@@ -352,12 +367,62 @@ const MONITOR_INTERVAL_MS = 500;  // TP/SL Monitor alle 500ms
 
 let isRunning   = false;
 let scanTimer   = null;
-let priceTimer  = null;
-let candles     = [];   // Letzte 10 1min Kerzen
+let priceTimer   = null;
+let candles      = [];
 let activeTrades = [];
 let tradeHistory = [];
-let stats = { wins: 0, losses: 0, totalPnl: 0, obCount: 0 };
-let lastOBCheck = 0;
+let stats        = { wins: 0, losses: 0, totalPnl: 0, obCount: 0 };
+let lastOBCheck  = 0;
+let lastOBTimestamp = 0;
+let lastPnlDisplay  = 0;
+
+// ═══════════════════════════════════════════════════════
+// ECHTER PnL DIREKT VON BYBIT – keine lokale Berechnung!
+// ═══════════════════════════════════════════════════════
+async function syncRealPnL() {
+  const key = document.getElementById('apiKey').value.trim();
+  if (!key) return;
+
+  // Realisierter PnL heute
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pnlResult = await bybitGet('/v5/position/closed-pnl', {
+    category:  'linear',
+    symbol:    SYMBOL,
+    startTime: today.getTime().toString(),
+    limit:     '50'
+  });
+
+  let realisedPnl = 0; let wins = 0; let losses = 0;
+  if (pnlResult?.list) {
+    pnlResult.list.forEach(p => {
+      const pnl = parseFloat(p.closedPnl || 0);
+      realisedPnl += pnl;
+      if (pnl > 0) wins++;
+      else if (pnl < 0) losses++;
+    });
+  }
+
+  // Unrealisierter PnL von offener Position
+  const posResult = await bybitGet('/v5/position/list', {category:'linear', symbol:SYMBOL});
+  let unrealPnl = 0;
+  if (posResult?.list) {
+    const pos = posResult.list.find(p => parseFloat(p.size) > 0);
+    if (pos) unrealPnl = parseFloat(pos.unrealisedPnl || 0);
+  }
+
+  const totalPnl = realisedPnl + unrealPnl;
+  stats.totalPnl = totalPnl;
+  stats.wins     = wins;
+  stats.losses   = losses;
+
+  // Dashboard – 100% Bybit Werte
+  const total = wins + losses;
+  const wr    = total > 0 ? (wins/total*100).toFixed(1) + '%' : '—';
+  document.getElementById('winrate').textContent    = wr;
+  document.getElementById('winrateSub').textContent = `${wins}W / ${losses}L`;
+  document.getElementById('totalPnl').textContent   = (totalPnl>=0?'+':'') + '$' + totalPnl.toFixed(4);
+  document.getElementById('totalPnl').style.color   = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+}
 
 // Live Berechnung Trade-Betrag
 function updateTradeNote() {
@@ -393,9 +458,10 @@ async function tryLoadBalance() {
   // Starte Echtzeit-Sync sofort (unabhängig vom Bot Start)
   if (!window._syncStarted) {
     window._syncStarted = true;
-    setInterval(updateBalance,          3000);  // Balance alle 3s
-    setInterval(syncBybitPositions,     1000);  // Position alle 1s
-    setInterval(updateLivePrice,         500);  // Preis alle 500ms
+    setInterval(updateBalance,    3000);   // Balance alle 3s
+    setInterval(syncBybitPositions, 1000); // Position alle 1s
+    setInterval(updateLivePrice,   500);   // Preis alle 500ms
+    setInterval(syncRealPnL,      5000);   // Echter PnL alle 5s
     log('✅ Echtzeit-Sync gestartet!', 'ok');
   }
 }
@@ -534,48 +600,39 @@ async function bybitGet(endpoint, params) {
 function detectOrderBlock(candles) {
   if (candles.length < 6) return null;
   const len = candles.length;
+  const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
 
-  // Suche in den letzten 12 ABGESCHLOSSENEN Kerzen
-  // Kerze[len-1] = aktuelle noch laufende → NICHT verwenden
-  // Kerze[len-2] = letzte abgeschlossene → Start
-  
+  // Suche in letzten 12 abgeschlossenen Kerzen
+  // Kerze[len-1] = aktuelle laufende → NICHT verwenden
   for (let i = len-6; i >= Math.max(1, len-14); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
     const b2 = candles[i+2];
     const b3 = candles[i+3];
-
     if (!ob || !b1 || !b2 || !b3) continue;
-    // Sicherstellen dass alle Kerzen gültige Daten haben
-    if (!ob.open || !b1.open || !b2.open || !b3.open) continue;
+    if (!ob.ts) continue;
 
-    // ── LONG: Bearisch + 3× Bullisch ──────────────────
+    // ── LONG: Bear + 3× Bull ─────────────────────────
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
       if (move >= 0.08) {
-        return {
-          direction:   'LONG',
-          entry:       b1.open,
-          tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
-          detected_at: new Date().toLocaleTimeString(),
-          move_pct:    move.toFixed(3),
-          candle_idx:  i,
-        };
+        const key = ob.ts + '_L';
+        if (lastOBTimestamp === key) continue; // Bereits getradet!
+        return { direction:'LONG', entry:b1.open, tp_pct, 
+                 detected_at:new Date().toLocaleTimeString(),
+                 move_pct:move.toFixed(3), ob_key:key };
       }
     }
 
-    // ── SHORT: Bullisch + 3× Bearisch ─────────────────
+    // ── SHORT: Bull + 3× Bear ────────────────────────
     if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
       const move = (ob.high - b3.close) / ob.high * 100;
       if (move >= 0.08) {
-        return {
-          direction:   'SHORT',
-          entry:       b1.open,
-          tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
-          detected_at: new Date().toLocaleTimeString(),
-          move_pct:    move.toFixed(3),
-          candle_idx:  i,
-        };
+        const key = ob.ts + '_S';
+        if (lastOBTimestamp === key) continue; // Bereits getradet!
+        return { direction:'SHORT', entry:b1.open, tp_pct,
+                 detected_at:new Date().toLocaleTimeString(),
+                 move_pct:move.toFixed(3), ob_key:key };
       }
     }
   }
@@ -661,31 +718,28 @@ async function executeTrade(ob) {
 // ═══════════════════════════════════════════════════════
 // KONTO-SCHUTZ (KEIN Trade SL – nur Konto-Schutz!)
 // ═══════════════════════════════════════════════════════
-// Der Trade läuft IMMER bis TP – keine Unterbrechung!
-// Schutz nur auf Konto-Ebene:
-//   Stufe 1: Tagsverlust > 10% → keine neuen Trades
-//   Stufe 2: Tagsverlust > 20% → Bot stoppt (Totalverlust verhindert)
-
+// KONTO-SCHUTZ – Einstellbar im Dashboard
+// Du bestimmst selbst wann der Bot stoppt!
+// ═══════════════════════════════════════════════════════
 function checkAccountSafety() {
-  const capital     = parseFloat(document.getElementById('capital').value);
-  const warnLimit   = capital * 0.10;   // 10% = keine neuen Trades
-  const stopLimit   = capital * 0.20;   // 20% = Notfall-Stop
-
+  const capital   = parseFloat(document.getElementById('capital').value);
+  const warnPct   = parseFloat(document.getElementById('warnLoss').value  || 10) / 100;
+  const stopPct   = parseFloat(document.getElementById('stopLoss2').value || 20) / 100;
+  const warnLimit = capital * warnPct;
+  const stopLimit = capital * stopPct;
   const todayLoss = Math.abs(Math.min(0, stats.totalPnl));
 
-  if (todayLoss >= stopLimit) {
-    log(`🚨 KONTO-SCHUTZ AKTIV! Verlust $${todayLoss.toFixed(2)} > 20% ($${stopLimit.toFixed(2)})`, 'err');
-    log(`🚨 Bot gestoppt – Totalverlust verhindert! Offene Trades laufen weiter bis TP.`, 'err');
-    // Bot stoppt NEUE Trades – aber offene Trades laufen weiter bis TP!
+  if (stopPct > 0 && todayLoss >= stopLimit) {
+    log(`🚨 STOP-LIMIT erreicht! Verlust $${todayLoss.toFixed(2)} – Bot gestoppt!`, 'err');
     isRunning = false;
     clearInterval(scanTimer);
-    document.getElementById('startBtn').textContent = '▶ START';
-    document.getElementById('statusDot').className  = 'dot off';
-    document.getElementById('statusText').textContent = 'Konto-Schutz aktiv';
+    document.getElementById('startBtn').textContent     = '▶ START';
+    document.getElementById('statusDot').className      = 'dot off';
+    document.getElementById('statusText').textContent   = 'Stop-Limit erreicht';
     return false;
   }
-  if (todayLoss >= warnLimit) {
-    log(`⚠️ WARNUNG: Verlust $${todayLoss.toFixed(2)} > 10% – keine neuen Trades heute!`, 'warn');
+  if (warnPct > 0 && todayLoss >= warnLimit) {
+    log(`⚠️ Warn-Limit $${todayLoss.toFixed(2)} – keine neuen Trades!`, 'warn');
     return false;
   }
   return true;
@@ -780,7 +834,7 @@ async function monitorTrade(trade) {
       trade.status   = 'loss';
       trade.pnl      = -sl_usd;
       stats.losses++;
-      stats.totalPnl -= sl_usd;
+      syncRealPnL();
 
       log(`🛑 Notfall-SL: BTC fiel -1.5% | Verlust: -$${sl_usd.toFixed(2)}`, 'err');
       activeTrades = activeTrades.filter(t => t.id !== trade.id);
@@ -807,7 +861,7 @@ async function monitorTrade(trade) {
       trade.status   = 'win';
       trade.pnl      = tp_pnl;
       stats.wins++;
-      stats.totalPnl += tp_pnl;
+      syncRealPnL();
 
       log(`🎯 TP getroffen! +$${tp_pnl.toFixed(2)} | Trade #${trade.id.slice(-6)}`, 'ok');
       activeTrades = activeTrades.filter(t => t.id !== trade.id);
@@ -846,6 +900,12 @@ async function scanLoop() {
   const ob = detectOrderBlock(candles);
 
   if (ob) {
+    // ob_key bereits in detectOrderBlock geprüft – hier nochmal sicher
+    if (lastOBTimestamp === ob.ob_key) {
+      document.getElementById('signalBadge').className   = 'signal-badge scan';
+      document.getElementById('signalBadge').textContent = 'SCANNING...';
+      return;
+    }
     log(`🔍 ${ob.direction} Order Block @ ${ob.detected_at} | Move: ${ob.move_pct}%`, 'ok');
 
     // Prüfe offene Position – bei Fehler trotzdem weitermachen!
@@ -877,6 +937,7 @@ async function scanLoop() {
 
     const key = document.getElementById('apiKey').value.trim();
     if (key) {
+      lastOBTimestamp = ob.ob_key; // Merke diesen OB – nie wieder traden!
       await executeTrade(ob);
     } else {
       log('⚠️ API Keys fehlen!', 'warn');
@@ -928,8 +989,7 @@ function updateUI() {
   const wr    = total > 0 ? (stats.wins / total * 100).toFixed(1) + '%' : '—';
   document.getElementById('winrate').textContent    = wr;
   document.getElementById('winrateSub').textContent = `${stats.wins}W / ${stats.losses}L`;
-  document.getElementById('totalPnl').textContent   = '$' + stats.totalPnl.toFixed(2);
-  document.getElementById('totalPnl').style.color   = stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  // PnL wird von syncRealPnL gesetzt – nicht lokal!
 
   // Aktive Trades
   const wrap = document.getElementById('activeTradesWrap');
@@ -991,7 +1051,19 @@ async function syncBybitPositions() {
     const pnlColor  = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
     const pnlStr    = (unPnl>=0?'+':'') + '$' + unPnl.toFixed(4);
 
-    // Position Panel
+    // Flacker-Schutz: nur updaten wenn Änderung > $0.0001
+    if (Math.abs(unPnl - lastPnlDisplay) > 0.0001) {
+      lastPnlDisplay = unPnl;
+      document.getElementById('posPnl').textContent      = pnlStr;
+      document.getElementById('posPnl').style.color      = pnlColor;
+      document.getElementById('posPnl').style.fontSize   = '20px';
+      document.getElementById('posPnl').style.fontWeight = 'bold';
+      // Gesamt PnL auch updaten
+      document.getElementById('totalPnl').textContent = pnlStr;
+      document.getElementById('totalPnl').style.color = pnlColor;
+    }
+
+    // Position Panel – immer updaten
     document.getElementById('noPosition').style.display   = 'none';
     document.getElementById('positionData').style.display = 'block';
     document.getElementById('posEntry').textContent    = '$' + entry.toFixed(2);
@@ -999,11 +1071,6 @@ async function syncBybitPositions() {
     document.getElementById('posTP').textContent       = '$' + tp_price.toFixed(2);
     document.getElementById('posSL').textContent       = '$' + sl_price.toFixed(2);
     document.getElementById('posNotional').textContent = '$' + notional.toFixed(0);
-    document.getElementById('posTime').textContent     = new Date().toLocaleTimeString();
-    document.getElementById('posPnl').textContent      = pnlStr;
-    document.getElementById('posPnl').style.color      = pnlColor;
-    document.getElementById('posPnl').style.fontSize   = '20px';
-    document.getElementById('posPnl').style.fontWeight = 'bold';
     document.getElementById('tpProgress').style.width  = progress + '%';
     document.getElementById('tpProgress').style.background = pnlColor;
 
@@ -1050,7 +1117,7 @@ async function syncBybitPositions() {
         reduceOnly:true,timeInForce:'GTC'
       });
       stats.wins++;
-      stats.totalPnl += unPnl;
+      syncRealPnL();
       updateUI();
     }
 
@@ -1064,7 +1131,7 @@ async function syncBybitPositions() {
         reduceOnly:true,timeInForce:'GTC'
       });
       stats.losses++;
-      stats.totalPnl += unPnl;
+      syncRealPnL();
       updateUI();
     }
 
