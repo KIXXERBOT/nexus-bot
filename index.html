@@ -345,7 +345,7 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
 // KONFIGURATION
 // ═══════════════════════════════════════════════════════
 const SYMBOL      = 'BTCUSDT';
-const SCAN_INTERVAL_MS  = 60000;  // OB Scan alle 60s (1min Kerzen!)
+const SCAN_INTERVAL_MS  = 15000;  // OB Scan alle 15s
 const PRICE_INTERVAL_MS = 500;    // Preis alle 500ms
 const SYNC_INTERVAL_MS  = 1000;   // Bybit Sync alle 1s
 const MONITOR_INTERVAL_MS = 500;  // TP/SL Monitor alle 500ms
@@ -417,9 +417,9 @@ const MARKET_BASE = 'https://api.bybit.com';
 
 async function getCandles() {
   try {
-    // Immer Live-Daten für Signale!
+    // Immer Live-Daten für Signale! Mehr Kerzen für bessere OB Erkennung
     const r = await fetch(
-      `${MARKET_BASE}/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=1&limit=10`
+      `${MARKET_BASE}/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=1&limit=20`
     );
     const d = await r.json();
     if (d.retCode !== 0) throw new Error(d.retMsg);
@@ -526,10 +526,9 @@ function detectOrderBlock(candles) {
   if (candles.length < 5) return null;
   const len = candles.length;
 
-  for (let offset = 1; offset <= 3; offset++) {
-    const i = len - 4 - offset;
-    if (i < 0) continue;
-
+  // Suche in den letzten 10 abgeschlossenen Kerzen nach OB
+  // Letzte Kerze (len-1) noch nicht abgeschlossen → überspringen
+  for (let i = len - 5; i >= Math.max(0, len - 12); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
     const b2 = candles[i+2];
@@ -537,10 +536,9 @@ function detectOrderBlock(candles) {
     if (!ob || !b1 || !b2 || !b3) continue;
 
     // ── LONG Order Block ──────────────────────────────
-    // Bearische Kerze + 3 Bullische Kerzen
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
-      if (move >= 0.10) {
+      if (move >= 0.08) {  // 0.08% statt 0.10% – etwas sensibler
         return {
           direction:   'LONG',
           ob_candle:   ob,
@@ -553,10 +551,9 @@ function detectOrderBlock(candles) {
     }
 
     // ── SHORT Order Block ─────────────────────────────
-    // Bullische Kerze + 3 Bearische Kerzen
     if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
       const move = (ob.high - b3.close) / ob.high * 100;
-      if (move >= 0.10) {
+      if (move >= 0.08) {
         return {
           direction:   'SHORT',
           ob_candle:   ob,
@@ -827,41 +824,48 @@ async function scanLoop() {
   document.getElementById('btcPrice').textContent = '$' + price.toLocaleString('de-DE', {maximumFractionDigits: 0});
   document.getElementById('candleTime').textContent = new Date().toLocaleTimeString();
 
+  // Debug: Zeige aktuelles Kerzenmuster
+  const pattern = candles.slice(-6,-1).map(c => c.bull ? '🟢' : '🔴').join('');
+  log(`📊 Muster: ${pattern} | BTC: $${price.toFixed(0)}`, 'info');
+
   // Order Block erkennen
   const ob = detectOrderBlock(candles);
 
   if (ob) {
     log(`🔍 ${ob.direction} Order Block @ ${ob.detected_at} | Move: ${ob.move_pct}%`, 'ok');
 
-    // Prüfe ob bereits eine offene Position bei Bybit existiert
-    const posCheck = await bybitGet('/v5/position/list', { category: 'linear', symbol: SYMBOL });
-    const hasOpenPos = posCheck?.list?.some(p => parseFloat(p.size) > 0);
+    // Prüfe offene Position – bei Fehler trotzdem weitermachen!
+    let hasOpenPos = false;
+    try {
+      const posCheck = await bybitGet('/v5/position/list', { category: 'linear', symbol: SYMBOL });
+      hasOpenPos = posCheck?.list?.some(p => parseFloat(p.size) > 0) || false;
+    } catch(e) {
+      log('Position Check Fehler – fahre fort', 'warn');
+    }
+
     if (hasOpenPos) {
-      log(`⏳ Bereits offene Position – warte auf TP/SL`, 'info');
+      log(`⏳ Position offen – warte auf TP/SL`, 'info');
       return;
     }
 
-    // Sicherheitscheck
     if (!checkAccountSafety()) {
-      log('⚠️ Kein neuer Trade – Tageslimit erreicht!', 'warn');
+      log('⚠️ Tageslimit erreicht!', 'warn');
       return;
     }
 
-    // Badge LONG = grün, SHORT = rot
-    document.getElementById('signalBadge').className = ob.direction === 'LONG' ? 'signal-badge long' : 'signal-badge short';
+    document.getElementById('signalBadge').className   = ob.direction === 'LONG' ? 'signal-badge long' : 'signal-badge short';
     document.getElementById('signalBadge').textContent = ob.direction === 'LONG' ? '▲ LONG OB' : '▼ SHORT OB';
-    document.getElementById('lastOBTime').textContent = ob.detected_at;
-    document.getElementById('lastEntry').textContent  = '$' + ob.entry.toFixed(2);
-    document.getElementById('lastTP').textContent     = '$' + (ob.direction === 'LONG'
+    document.getElementById('lastOBTime').textContent  = ob.detected_at;
+    document.getElementById('lastEntry').textContent   = '$' + ob.entry.toFixed(2);
+    document.getElementById('lastTP').textContent      = '$' + (ob.direction === 'LONG'
       ? ob.entry * (1 + ob.tp_pct)
       : ob.entry * (1 - ob.tp_pct)).toFixed(2);
 
-    // Trade ausführen wenn API Keys vorhanden
     const key = document.getElementById('apiKey').value.trim();
     if (key) {
       await executeTrade(ob);
     } else {
-      log('API Keys fehlen – Signal erkannt aber kein Trade!', 'warn');
+      log('⚠️ API Keys fehlen!', 'warn');
     }
   } else {
     document.getElementById('signalBadge').className = 'signal-badge scan';
