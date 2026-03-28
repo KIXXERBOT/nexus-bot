@@ -387,8 +387,17 @@ async function tryLoadBalance() {
   const key    = document.getElementById('apiKey').value.trim();
   const secret = document.getElementById('apiSecret').value.trim();
   if (!key || !secret) return;
-  log('🔑 API Keys erkannt – lade Balance...', 'info');
+  log('🔑 API Keys erkannt – verbinde mit Bybit...', 'info');
   await updateBalance();
+  await syncBybitPositions();
+  // Starte Echtzeit-Sync sofort (unabhängig vom Bot Start)
+  if (!window._syncStarted) {
+    window._syncStarted = true;
+    setInterval(updateBalance,          3000);  // Balance alle 3s
+    setInterval(syncBybitPositions,     1000);  // Position alle 1s
+    setInterval(updateLivePrice,         500);  // Preis alle 500ms
+    log('✅ Echtzeit-Sync gestartet!', 'ok');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -882,25 +891,32 @@ async function scanLoop() {
 // BALANCE
 // ═══════════════════════════════════════════════════════
 async function updateBalance() {
+  const key    = document.getElementById('apiKey').value.trim();
+  const secret = document.getElementById('apiSecret').value.trim();
+  if (!key || !secret) return;
+
   const result = await bybitGet('/v5/account/wallet-balance', { accountType: 'UNIFIED' });
   if (!result) {
     document.getElementById('balance').textContent = 'API Fehler';
     document.getElementById('balance').style.color = 'var(--red)';
-    log('❌ Balance laden fehlgeschlagen – API Keys prüfen!', 'err');
     return;
   }
   try {
     const coins = result.list[0].coin;
     const usdt  = coins.find(c => c.coin === 'USDT');
     if (usdt) {
+      const eq  = parseFloat(usdt.equity  || usdt.walletBalance).toFixed(2);
       const bal = parseFloat(usdt.walletBalance).toFixed(2);
-      document.getElementById('balance').textContent = '$' + bal;
+      document.getElementById('balance').textContent = '$' + eq;
       document.getElementById('balance').style.color = 'var(--gold)';
-      log(`💰 Balance geladen: $${bal} USDT`, 'ok');
+      // Gesamt PnL = Equity - Wallet (unrealisiert)
+      const unrealised = parseFloat(eq) - parseFloat(bal);
+      if (Math.abs(unrealised) > 0.001) {
+        document.getElementById('totalPnl').textContent = (unrealised>=0?'+':'') + '$' + unrealised.toFixed(4);
+        document.getElementById('totalPnl').style.color = unrealised>=0 ? 'var(--green)' : 'var(--red)';
+      }
     }
-  } catch(e) {
-    log('Balance Parse Fehler: ' + e.message, 'err');
-  }
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1114,12 +1130,9 @@ async function toggleBot() {
   // Balance laden
   await updateBalance();
 
-  // Scan + Echtzeit Überwachung
+  // Scan starten (Sync läuft bereits seit API Key Eingabe)
   await scanLoop();
-  scanTimer  = setInterval(scanLoop, SCAN_INTERVAL_MS);       // OB Scan alle 60s
-  priceTimer = setInterval(updateBalance, 30000);              // Balance alle 30s
-  setInterval(syncBybitPositions, SYNC_INTERVAL_MS);          // Position alle 1s
-  setInterval(updateLivePrice, PRICE_INTERVAL_MS);            // Preis alle 500ms
+  scanTimer = setInterval(scanLoop, SCAN_INTERVAL_MS);
 }
 
 function stopBot() {
