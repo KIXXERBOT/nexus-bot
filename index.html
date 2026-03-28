@@ -143,8 +143,13 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
   </div>
   <div class="field-group">
     <div class="field-label">Konto-Kapital (USDT)</div>
-    <input type="number" id="capital" class="field-input" value="500" min="100">
-    <div class="field-note">Trade = 10% des Kapitals</div>
+    <input type="number" id="capital" class="field-input" value="90" min="1">
+    <div class="field-note">Dein Gesamtkapital auf Bybit</div>
+  </div>
+  <div class="field-group">
+    <div class="field-label">Trade Größe %</div>
+    <input type="number" id="tradePct" class="field-input" value="10" min="1" max="100" step="1">
+    <div class="field-note" id="tradePctNote">= $9.00 pro Trade</div>
   </div>
   <div class="field-group">
     <div class="field-label">Leverage</div>
@@ -352,7 +357,30 @@ let tradeHistory = [];
 let stats = { wins: 0, losses: 0, totalPnl: 0, obCount: 0 };
 let lastOBCheck = 0;
 
-// Balance sofort laden wenn Keys eingegeben
+// Live Berechnung Trade-Betrag
+function updateTradeNote() {
+  const capital  = parseFloat(document.getElementById('capital').value) || 0;
+  const tradePct = parseFloat(document.getElementById('tradePct').value) || 10;
+  const leverage = parseInt(document.getElementById('leverage').value) || 10;
+  const tpPct    = parseFloat(document.getElementById('tpPct').value) || 0.3;
+
+  const margin   = capital * tradePct / 100;
+  const notional = margin * leverage;
+  const tpUsd    = notional * tpPct / 100;
+  const slUsd    = notional * (parseFloat(document.getElementById('slPct').value)||1.5) / 100;
+
+  document.getElementById('tradePctNote').textContent =
+    `= $${margin.toFixed(2)} Margin → $${notional.toFixed(0)} Notional | TP: +$${tpUsd.toFixed(3)} | SL: -$${slUsd.toFixed(2)}`;
+}
+
+// Bei Änderung neu berechnen
+document.addEventListener('DOMContentLoaded', () => {
+  ['capital','tradePct','leverage','tpPct','slPct'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateTradeNote);
+  });
+  updateTradeNote();
+});
 async function tryLoadBalance() {
   const key    = document.getElementById('apiKey').value.trim();
   const secret = document.getElementById('apiSecret').value.trim();
@@ -544,6 +572,7 @@ function detectOrderBlock(candles) {
 // ═══════════════════════════════════════════════════════
 async function executeTrade(ob) {
   const capital   = parseFloat(document.getElementById('capital').value);
+  const tradePct  = parseFloat(document.getElementById('tradePct').value) / 100;
   const leverage  = parseInt(document.getElementById('leverage').value);
   const maxT      = parseInt(document.getElementById('maxTrades').value);
 
@@ -552,10 +581,12 @@ async function executeTrade(ob) {
     return;
   }
 
-  const margin   = capital * 0.10;          // 10% des Kontos
+  const margin   = capital * tradePct;
   const notional = margin * leverage;
   const tp_price = ob.entry * (1 + ob.tp_pct);
   const qty      = (notional / ob.entry).toFixed(3);
+
+  log(`💰 Trade: $${margin.toFixed(2)} (${(tradePct*100).toFixed(0)}% von $${capital}) × ${leverage}× = $${notional.toFixed(0)} Notional`, 'ok');
 
   log(`📊 Order Block erkannt! Move: +${ob.move_pct}%`, 'ok');
   log(`📥 Entry: $${ob.entry.toFixed(2)} | TP: $${tp_price.toFixed(2)} | Qty: ${qty}`, 'ok');
@@ -598,6 +629,7 @@ async function executeTrade(ob) {
   };
 
   activeTrades.push(trade);
+  lastTradeTime = Date.now(); // Cooldown starten
   stats.obCount++;
   updateUI();
 
@@ -755,6 +787,14 @@ async function scanLoop() {
   if (ob) {
     log(`🔍 Order Block erkannt @ ${ob.detected_at} | Move: +${ob.move_pct}%`, 'ok');
 
+    // Cooldown Check – kein neuer Trade innerhalb 5 Minuten
+    const timeSinceLast = Date.now() - lastTradeTime;
+    if (timeSinceLast < COOLDOWN_MS) {
+      const waitMin = Math.ceil((COOLDOWN_MS - timeSinceLast) / 60000);
+      log(`⏳ Cooldown aktiv – nächster Trade in ${waitMin} Min`, 'warn');
+      return;
+    }
+
     // Sicherheitscheck vor Trade
     if (!checkAccountSafety()) {
       log('⚠️ Kein neuer Trade – Tageslimit erreicht!', 'warn');
@@ -849,31 +889,86 @@ function updateUI() {
   }
 }
 
-function updatePositionPanel(trade, price) {
-  if (!trade || trade.status !== 'open') {
-    document.getElementById('noPosition').style.display = 'block';
+// ═══════════════════════════════════════════════════════
+// ECHTZEIT BYBIT SYNC
+// Holt echte Position/PnL direkt von Bybit alle 3 Sekunden
+// ═══════════════════════════════════════════════════════
+let lastTradeTime = 0;
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 Minuten Cooldown
+
+async function syncBybitPositions() {
+  if (!isRunning) return;
+  const result = await bybitGet('/v5/position/list', {
+    category: 'linear', symbol: SYMBOL
+  });
+  if (!result || !result.list) return;
+
+  const pos = result.list.find(p => parseFloat(p.size) > 0);
+
+  if (pos) {
+    const entry    = parseFloat(pos.avgPrice);
+    const size     = parseFloat(pos.size);
+    const markPrice= parseFloat(pos.markPrice);
+    const unPnl    = parseFloat(pos.unrealisedPnl);
+    const liqPrice = parseFloat(pos.liqPrice);
+    const elapsed  = Math.floor((Date.now() - (parseInt(pos.createdTime)||Date.now())) / 60000);
+
+    // Dashboard aktualisieren
+    document.getElementById('noPosition').style.display   = 'none';
+    document.getElementById('positionData').style.display = 'block';
+
+    document.getElementById('posEntry').textContent    = '$' + entry.toFixed(2);
+    document.getElementById('posCurrent').textContent  = '$' + markPrice.toFixed(2);
+    document.getElementById('posTP').textContent       = '$' + (entry * (1 + parseFloat(document.getElementById('tpPct').value)/100)).toFixed(2);
+    document.getElementById('posSL').textContent       = '$' + (entry * (1 - parseFloat(document.getElementById('slPct').value)/100)).toFixed(2);
+    document.getElementById('posNotional').textContent = '$' + (entry * size).toFixed(0);
+    document.getElementById('posTime').textContent     = elapsed + ' Min';
+    document.getElementById('posPnl').textContent      = '$' + unPnl.toFixed(4);
+    document.getElementById('posPnl').style.color      = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Aktive Trades Panel aktualisieren
+    const tp_pct = parseFloat(document.getElementById('tpPct').value)/100;
+    const progress = Math.max(0, Math.min(100, (markPrice-entry)/entry/tp_pct*100));
+    document.getElementById('tpProgress').style.width      = progress + '%';
+    document.getElementById('tpProgress').style.background = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // TP Check von Bybit Daten
+    if (markPrice >= entry * (1 + tp_pct)) {
+      log(`🎯 TP erreicht @ $${markPrice.toFixed(2)} | PnL: +$${unPnl.toFixed(4)}`, 'ok');
+    }
+
+    // Liq Warnung
+    if (Math.abs(markPrice - liqPrice) / markPrice < 0.05) {
+      log(`⚠️ WARNUNG: Liquidationspreis nah! Liq: $${liqPrice.toFixed(2)}`, 'err');
+    }
+
+  } else {
+    // Keine offene Position
+    document.getElementById('noPosition').style.display   = 'block';
     document.getElementById('positionData').style.display = 'none';
-    return;
   }
 
-  document.getElementById('noPosition').style.display  = 'none';
-  document.getElementById('positionData').style.display = 'block';
+  // Balance aktualisieren
+  const balResult = await bybitGet('/v5/account/wallet-balance', { accountType: 'UNIFIED' });
+  if (balResult) {
+    try {
+      const usdt = balResult.list[0].coin.find(c => c.coin === 'USDT');
+      if (usdt) {
+        const bal = parseFloat(usdt.walletBalance).toFixed(2);
+        const eq  = parseFloat(usdt.equity).toFixed(2);
+        document.getElementById('balance').textContent = '$' + bal;
+        // Zeige auch Equity (inkl. unrealisierter PnL)
+        document.getElementById('balance').title = `Equity: $${eq}`;
+      }
+    } catch(e) {}
+  }
+}
 
-  const pnl    = (price - trade.entry) / trade.entry * trade.notional;
-  const pnlPct = (price - trade.entry) / trade.entry * 100;
-  const progress = Math.max(0, Math.min(100, pnlPct / (parseFloat(document.getElementById('tpPct').value) / 100) * 100));
-  const elapsed  = Math.floor((Date.now() - trade.openTime) / 60000);
-
-  document.getElementById('posEntry').textContent   = '$' + trade.entry.toFixed(2);
-  document.getElementById('posCurrent').textContent = '$' + price.toFixed(2);
-  document.getElementById('posTP').textContent      = '$' + trade.tp.toFixed(2);
-  document.getElementById('posSL').textContent      = '$' + (trade.entry * (1 - parseFloat(document.getElementById('slPct').value)/100)).toFixed(2);
-  document.getElementById('posNotional').textContent = '$' + trade.notional.toFixed(0);
-  document.getElementById('posTime').textContent    = elapsed + ' Min';
-  document.getElementById('posPnl').textContent     = '$' + pnl.toFixed(2);
-  document.getElementById('posPnl').style.color     = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('tpProgress').style.width = progress + '%';
-  document.getElementById('tpProgress').style.background = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+function updatePositionPanel(trade, price) {
+  // Wird durch syncBybitPositions ersetzt – nur als Fallback
+  if (!trade || trade.status !== 'open') return;
+  const pnl = (price - trade.entry) / trade.entry * trade.notional;
+  trade.pnl = pnl;
 }
 
 // ═══════════════════════════════════════════════════════
@@ -906,10 +1001,12 @@ async function toggleBot() {
   // Balance laden
   await updateBalance();
 
-  // Scan starten
+  // Scan + Balance + Echtzeit Bybit Sync starten
   await scanLoop();
   scanTimer  = setInterval(scanLoop, SCAN_INTERVAL_MS);
   priceTimer = setInterval(updateBalance, 30000);
+  // Echtzeit Position Sync alle 3 Sekunden
+  setInterval(syncBybitPositions, 3000);
 }
 
 function stopBot() {
