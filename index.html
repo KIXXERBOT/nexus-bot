@@ -173,7 +173,6 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
   <div class="field-group">
     <div class="field-label">Modus</div>
     <select id="mode" class="field-input">
-      <option value="testnet">Testnet (sicher)</option>
       <option value="live">Live (Echtgeld)</option>
     </select>
   </div>
@@ -346,7 +345,10 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
 // KONFIGURATION
 // ═══════════════════════════════════════════════════════
 const SYMBOL      = 'BTCUSDT';
-const SCAN_INTERVAL_MS = 15000;  // Alle 15 Sekunden scannen
+const SCAN_INTERVAL_MS  = 60000;  // OB Scan alle 60s (1min Kerzen!)
+const PRICE_INTERVAL_MS = 500;    // Preis alle 500ms
+const SYNC_INTERVAL_MS  = 1000;   // Bybit Sync alle 1s
+const MONITOR_INTERVAL_MS = 500;  // TP/SL Monitor alle 500ms
 
 let isRunning   = false;
 let scanTimer   = null;
@@ -405,11 +407,9 @@ function log(msg, cls='info') {
 // ═══════════════════════════════════════════════════════
 // BYBIT API
 // ═══════════════════════════════════════════════════════
-// Orders: Testnet oder Live
+// Immer Live Bybit
 function getBase() {
-  return document.getElementById('mode').value === 'testnet'
-    ? 'https://api-testnet.bybit.com'
-    : 'https://api.bybit.com';
+  return 'https://api.bybit.com';
 }
 
 // Marktdaten: IMMER Live (echter BTC Kurs!)
@@ -673,8 +673,47 @@ function checkAccountSafety() {
   return true;
 }
 
-// ═══════════════════════════════════════════════════════
-// TRADE MONITOR
+// ─── Schneller Live-Preis Update (500ms) ─────────────────
+let lastPrice = 0;
+async function updateLivePrice() {
+  if (!isRunning) return;
+  const price = await getMarkPrice();
+  if (!price || price === lastPrice) return;
+  lastPrice = price;
+
+  // BTC Preis im Dashboard
+  document.getElementById('btcPrice').textContent =
+    '$' + price.toLocaleString('de-DE', {maximumFractionDigits: 2});
+
+  // Aktive Trades PnL sofort aktualisieren
+  activeTrades.forEach(trade => {
+    trade.pnl = (price - trade.entry) / trade.entry * trade.notional;
+  });
+
+  // Trades Panel neu rendern
+  if (activeTrades.length > 0) {
+    const atDiv = document.getElementById('activeTrades');
+    atDiv.innerHTML = activeTrades.map(t => {
+      const pnl = (price - t.entry) / t.entry * t.notional;
+      const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const tp_pct = parseFloat(document.getElementById('tpPct').value)/100;
+      const progress = Math.max(0,Math.min(100,(price-t.entry)/t.entry/tp_pct*100));
+      return `<div style="background:var(--bg);border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:11px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="color:var(--muted)">${t.openStr}</span>
+          <span style="color:var(--gold)">Entry: $${t.entry.toFixed(2)}</span>
+          <span style="color:var(--green)">TP: $${t.tp.toFixed(2)}</span>
+          <span style="color:${pnlColor};font-weight:bold">PnL: $${pnl.toFixed(4)}</span>
+        </div>
+        <div style="height:3px;background:var(--bg3);border-radius:2px">
+          <div style="width:${progress}%;height:100%;background:${pnlColor};border-radius:2px;transition:width 0.3s"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// ─── Schneller Trade Monitor (500ms) ──────────────────────
 // SL = 1.5% vom Entry (aus Daten: 80% der Trades bewegen sich
 // nie mehr als 0.8% gegen uns → 1.5% stört den Trade NICHT)
 // ═══════════════════════════════════════════════════════
@@ -761,7 +800,7 @@ async function monitorTrade(trade) {
 
     updatePositionPanel(trade, price);
 
-  }, 5000);
+  }, MONITOR_INTERVAL_MS); // 500ms – Echtzeit TP/SL Überwachung
 }
 
 // ═══════════════════════════════════════════════════════
@@ -787,15 +826,15 @@ async function scanLoop() {
   if (ob) {
     log(`🔍 Order Block erkannt @ ${ob.detected_at} | Move: +${ob.move_pct}%`, 'ok');
 
-    // Cooldown Check – kein neuer Trade innerhalb 5 Minuten
-    const timeSinceLast = Date.now() - lastTradeTime;
-    if (timeSinceLast < COOLDOWN_MS) {
-      const waitMin = Math.ceil((COOLDOWN_MS - timeSinceLast) / 60000);
-      log(`⏳ Cooldown aktiv – nächster Trade in ${waitMin} Min`, 'warn');
+    // Prüfe ob bereits eine offene Position bei Bybit existiert
+    const posCheck = await bybitGet('/v5/position/list', { category: 'linear', symbol: SYMBOL });
+    const hasOpenPos = posCheck?.list?.some(p => parseFloat(p.size) > 0);
+    if (hasOpenPos) {
+      log(`⏳ Bereits offene Position – warte auf TP/SL`, 'info');
       return;
     }
 
-    // Sicherheitscheck vor Trade
+    // Sicherheitscheck
     if (!checkAccountSafety()) {
       log('⚠️ Kein neuer Trade – Tageslimit erreicht!', 'warn');
       return;
@@ -890,75 +929,129 @@ function updateUI() {
 }
 
 // ═══════════════════════════════════════════════════════
-// ECHTZEIT BYBIT SYNC
-// Holt echte Position/PnL direkt von Bybit alle 3 Sekunden
+// ECHTZEIT BYBIT SYNC – 100% von Bybit, Echtzeit PnL!
 // ═══════════════════════════════════════════════════════
 let lastTradeTime = 0;
-const COOLDOWN_MS = 5 * 60 * 1000; // 5 Minuten Cooldown
 
 async function syncBybitPositions() {
-  if (!isRunning) return;
-  const result = await bybitGet('/v5/position/list', {
-    category: 'linear', symbol: SYMBOL
-  });
+  const result = await bybitGet('/v5/position/list', {category:'linear', symbol:SYMBOL});
   if (!result || !result.list) return;
 
   const pos = result.list.find(p => parseFloat(p.size) > 0);
 
   if (pos) {
-    const entry    = parseFloat(pos.avgPrice);
-    const size     = parseFloat(pos.size);
-    const markPrice= parseFloat(pos.markPrice);
-    const unPnl    = parseFloat(pos.unrealisedPnl);
-    const liqPrice = parseFloat(pos.liqPrice);
-    const elapsed  = Math.floor((Date.now() - (parseInt(pos.createdTime)||Date.now())) / 60000);
+    const entry     = parseFloat(pos.avgPrice);
+    const size      = parseFloat(pos.size);
+    const markPrice = parseFloat(pos.markPrice);
+    const unPnl     = parseFloat(pos.unrealisedPnl);
+    const liqPrice  = parseFloat(pos.liqPrice);
+    const side      = pos.side;
+    const notional  = entry * size;
+    const tp_pct    = parseFloat(document.getElementById('tpPct').value)/100;
+    const sl_pct    = parseFloat(document.getElementById('slPct').value)/100;
+    const tp_price  = side==='Buy' ? entry*(1+tp_pct) : entry*(1-tp_pct);
+    const sl_price  = side==='Buy' ? entry*(1-sl_pct) : entry*(1+sl_pct);
+    const progress  = Math.max(0,Math.min(100,(markPrice-entry)/entry/tp_pct*100));
+    const pnlColor  = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const pnlStr    = (unPnl>=0?'+':'') + '$' + unPnl.toFixed(4);
 
-    // Dashboard aktualisieren
+    // Position Panel
     document.getElementById('noPosition').style.display   = 'none';
     document.getElementById('positionData').style.display = 'block';
-
     document.getElementById('posEntry').textContent    = '$' + entry.toFixed(2);
     document.getElementById('posCurrent').textContent  = '$' + markPrice.toFixed(2);
-    document.getElementById('posTP').textContent       = '$' + (entry * (1 + parseFloat(document.getElementById('tpPct').value)/100)).toFixed(2);
-    document.getElementById('posSL').textContent       = '$' + (entry * (1 - parseFloat(document.getElementById('slPct').value)/100)).toFixed(2);
-    document.getElementById('posNotional').textContent = '$' + (entry * size).toFixed(0);
-    document.getElementById('posTime').textContent     = elapsed + ' Min';
-    document.getElementById('posPnl').textContent      = '$' + unPnl.toFixed(4);
-    document.getElementById('posPnl').style.color      = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('posTP').textContent       = '$' + tp_price.toFixed(2);
+    document.getElementById('posSL').textContent       = '$' + sl_price.toFixed(2);
+    document.getElementById('posNotional').textContent = '$' + notional.toFixed(0);
+    document.getElementById('posTime').textContent     = new Date().toLocaleTimeString();
+    document.getElementById('posPnl').textContent      = pnlStr;
+    document.getElementById('posPnl').style.color      = pnlColor;
+    document.getElementById('posPnl').style.fontSize   = '20px';
+    document.getElementById('posPnl').style.fontWeight = 'bold';
+    document.getElementById('tpProgress').style.width  = progress + '%';
+    document.getElementById('tpProgress').style.background = pnlColor;
 
-    // Aktive Trades Panel aktualisieren
-    const tp_pct = parseFloat(document.getElementById('tpPct').value)/100;
-    const progress = Math.max(0, Math.min(100, (markPrice-entry)/entry/tp_pct*100));
-    document.getElementById('tpProgress').style.width      = progress + '%';
-    document.getElementById('tpProgress').style.background = unPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    // Aktive Trades Panel – Echtzeit
+    document.getElementById('activeTradesWrap').style.display = 'block';
+    document.getElementById('activeCount').textContent = '1';
+    document.getElementById('activeTrades').innerHTML = `
+      <div style="background:var(--bg);border-radius:6px;padding:12px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">ENTRY</div>
+               <div style="font-weight:bold;color:var(--gold)">$${entry.toFixed(2)}</div></div>
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">AKTUELL</div>
+               <div style="font-weight:bold;color:var(--text)">$${markPrice.toFixed(2)}</div></div>
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">TAKE PROFIT</div>
+               <div style="font-weight:bold;color:var(--green)">$${tp_price.toFixed(2)}</div></div>
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">STOP LOSS</div>
+               <div style="font-weight:bold;color:var(--red)">$${sl_price.toFixed(2)}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">PnL ECHTZEIT</div>
+               <div style="font-size:20px;font-weight:bold;color:${pnlColor}">${pnlStr}</div></div>
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">NOTIONAL</div>
+               <div style="font-weight:bold">$${notional.toFixed(0)}</div></div>
+          <div><div style="font-size:9px;color:var(--muted);margin-bottom:3px">LIQUIDATION</div>
+               <div style="font-weight:bold;color:var(--red)">$${liqPrice.toFixed(2)}</div></div>
+        </div>
+        <div style="background:var(--bg3);height:8px;border-radius:4px;overflow:hidden">
+          <div style="width:${progress}%;height:100%;background:${pnlColor};border-radius:4px;transition:width 0.2s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--muted)">
+          <span>$${entry.toFixed(2)}</span>
+          <span style="color:${pnlColor};font-weight:bold">${progress.toFixed(1)}% zum TP</span>
+          <span>$${tp_price.toFixed(2)}</span>
+        </div>
+      </div>`;
 
-    // TP Check von Bybit Daten
-    if (markPrice >= entry * (1 + tp_pct)) {
-      log(`🎯 TP erreicht @ $${markPrice.toFixed(2)} | PnL: +$${unPnl.toFixed(4)}`, 'ok');
+    // TP schließen
+    if ((side==='Buy' && markPrice>=tp_price) || (side==='Sell' && markPrice<=tp_price)) {
+      log(`🎯 TP ERREICHT @ $${markPrice.toFixed(2)} | PnL: ${pnlStr}`, 'ok');
+      await bybitPost('/v5/order/create', {
+        category:'linear',symbol:SYMBOL,
+        side:side==='Buy'?'Sell':'Buy',
+        orderType:'Market',qty:size.toString(),
+        reduceOnly:true,timeInForce:'GTC'
+      });
+      stats.wins++;
+      stats.totalPnl += unPnl;
+      updateUI();
+    }
+
+    // SL schließen
+    if ((side==='Buy' && markPrice<=sl_price) || (side==='Sell' && markPrice>=sl_price)) {
+      log(`🛑 SL ERREICHT @ $${markPrice.toFixed(2)} | PnL: ${pnlStr}`, 'err');
+      await bybitPost('/v5/order/create', {
+        category:'linear',symbol:SYMBOL,
+        side:side==='Buy'?'Sell':'Buy',
+        orderType:'Market',qty:size.toString(),
+        reduceOnly:true,timeInForce:'GTC'
+      });
+      stats.losses++;
+      stats.totalPnl += unPnl;
+      updateUI();
     }
 
     // Liq Warnung
-    if (Math.abs(markPrice - liqPrice) / markPrice < 0.05) {
-      log(`⚠️ WARNUNG: Liquidationspreis nah! Liq: $${liqPrice.toFixed(2)}`, 'err');
-    }
+    if (Math.abs(markPrice-liqPrice)/markPrice < 0.03)
+      log(`🚨 LIQUIDATION WARNUNG! Nur ${(Math.abs(markPrice-liqPrice)/markPrice*100).toFixed(2)}% entfernt!`, 'err');
 
   } else {
-    // Keine offene Position
     document.getElementById('noPosition').style.display   = 'block';
     document.getElementById('positionData').style.display = 'none';
+    document.getElementById('activeTradesWrap').style.display = 'none';
+    activeTrades = [];
   }
 
-  // Balance aktualisieren
-  const balResult = await bybitGet('/v5/account/wallet-balance', { accountType: 'UNIFIED' });
+  // Balance + Equity
+  const balResult = await bybitGet('/v5/account/wallet-balance', {accountType:'UNIFIED'});
   if (balResult) {
     try {
-      const usdt = balResult.list[0].coin.find(c => c.coin === 'USDT');
+      const usdt = balResult.list[0].coin.find(c => c.coin==='USDT');
       if (usdt) {
-        const bal = parseFloat(usdt.walletBalance).toFixed(2);
-        const eq  = parseFloat(usdt.equity).toFixed(2);
-        document.getElementById('balance').textContent = '$' + bal;
-        // Zeige auch Equity (inkl. unrealisierter PnL)
-        document.getElementById('balance').title = `Equity: $${eq}`;
+        const eq = parseFloat(usdt.equity||usdt.walletBalance).toFixed(2);
+        document.getElementById('balance').textContent = '$' + eq;
+        document.getElementById('balance').style.color = 'var(--gold)';
       }
     } catch(e) {}
   }
@@ -992,21 +1085,21 @@ async function toggleBot() {
   document.getElementById('startBtn').textContent = '⏸ PAUSE';
   
   document.getElementById('statusDot').className = 'dot live';
-  document.getElementById('statusText').textContent = mode === 'testnet' ? 'Live Daten · Testnet Orders' : 'LIVE TRADING';
+  document.getElementById('statusText').textContent = 'LIVE TRADING';
 
   log(`🚀 NEXUS v7 gestartet | Modus: ${mode.toUpperCase()}`, 'ok');
   log(`📡 Marktdaten: LIVE Bybit (echter BTC Kurs)`, 'ok');
-  log(`🧪 Orders: ${mode === 'testnet' ? 'TESTNET (Spielgeld)' : 'LIVE (Echtgeld!)'}`, mode === 'testnet' ? 'warn' : 'err');
+  log('✅ Orders: LIVE Bybit (Echtgeld)', 'ok');
 
   // Balance laden
   await updateBalance();
 
-  // Scan + Balance + Echtzeit Bybit Sync starten
+  // Scan + Echtzeit Überwachung
   await scanLoop();
-  scanTimer  = setInterval(scanLoop, SCAN_INTERVAL_MS);
-  priceTimer = setInterval(updateBalance, 30000);
-  // Echtzeit Position Sync alle 3 Sekunden
-  setInterval(syncBybitPositions, 3000);
+  scanTimer  = setInterval(scanLoop, SCAN_INTERVAL_MS);       // OB Scan alle 60s
+  priceTimer = setInterval(updateBalance, 30000);              // Balance alle 30s
+  setInterval(syncBybitPositions, SYNC_INTERVAL_MS);          // Position alle 1s
+  setInterval(updateLivePrice, PRICE_INTERVAL_MS);            // Preis alle 500ms
 }
 
 function stopBot() {
