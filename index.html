@@ -396,20 +396,24 @@ function log(msg, cls='info') {
 // ═══════════════════════════════════════════════════════
 // BYBIT API
 // ═══════════════════════════════════════════════════════
+// Orders: Testnet oder Live
 function getBase() {
   return document.getElementById('mode').value === 'testnet'
     ? 'https://api-testnet.bybit.com'
     : 'https://api.bybit.com';
 }
 
+// Marktdaten: IMMER Live (echter BTC Kurs!)
+const MARKET_BASE = 'https://api.bybit.com';
+
 async function getCandles() {
   try {
+    // Immer Live-Daten für Signale!
     const r = await fetch(
-      `${getBase()}/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=1&limit=10`
+      `${MARKET_BASE}/v5/market/kline?category=linear&symbol=${SYMBOL}&interval=1&limit=10`
     );
     const d = await r.json();
     if (d.retCode !== 0) throw new Error(d.retMsg);
-    // Bybit gibt neueste zuerst → umkehren
     return d.result.list.reverse().map(k => ({
       ts:    parseInt(k[0]),
       open:  parseFloat(k[1]),
@@ -427,8 +431,9 @@ async function getCandles() {
 
 async function getMarkPrice() {
   try {
+    // Immer Live-Preis!
     const r = await fetch(
-      `${getBase()}/v5/market/tickers?category=linear&symbol=${SYMBOL}`
+      `${MARKET_BASE}/v5/market/tickers?category=linear&symbol=${SYMBOL}`
     );
     const d = await r.json();
     return parseFloat(d.result.list[0].markPrice);
@@ -820,10 +825,11 @@ async function toggleBot() {
   document.getElementById('startBtn').textContent = '⏸ PAUSE';
   document.getElementById('stopBtn').style.display = 'block';
   document.getElementById('statusDot').className = 'dot live';
-  document.getElementById('statusText').textContent = mode === 'testnet' ? 'Testnet Aktiv' : 'LIVE Aktiv';
+  document.getElementById('statusText').textContent = mode === 'testnet' ? 'Live Daten · Testnet Orders' : 'LIVE TRADING';
 
   log(`🚀 NEXUS v7 gestartet | Modus: ${mode.toUpperCase()}`, 'ok');
-  log(`📋 Strategie: Order Block | TP: ${document.getElementById('tpPct').value}% | Leverage: ${document.getElementById('leverage').value}×`, 'ok');
+  log(`📡 Marktdaten: LIVE Bybit (echter BTC Kurs)`, 'ok');
+  log(`🧪 Orders: ${mode === 'testnet' ? 'TESTNET (Spielgeld)' : 'LIVE (Echtgeld!)'}`, mode === 'testnet' ? 'warn' : 'err');
 
   // Balance laden
   await updateBalance();
