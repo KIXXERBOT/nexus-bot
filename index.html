@@ -156,6 +156,11 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
     <div class="field-note">0.3% empfohlen (86.9% Trefferrate)</div>
   </div>
   <div class="field-group">
+    <div class="field-label">Stop Loss %</div>
+    <input type="number" id="slPct" class="field-input" value="1.5" step="0.1" min="0.5" max="10">
+    <div class="field-note">1.5% empfohlen (stört Trade nicht)</div>
+  </div>
+  <div class="field-group">
     <div class="field-label">Max gleichzeitige Trades</div>
     <input type="number" id="maxTrades" class="field-input" value="3" min="1" max="10">
   </div>
@@ -171,7 +176,7 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
   <div class="divider"></div>
 
   <button class="btn-start" id="startBtn" onclick="toggleBot()">▶ START</button>
-  <button class="btn-stop" id="stopBtn" onclick="stopAll()" style="display:none">■ STOP ALL</button>
+  <button class="btn-stop" id="stopBtn" onclick="stopAll()">■ STOP ALL</button>
 
   <div class="divider"></div>
 
@@ -181,7 +186,7 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
     🟢🟢🟢 3 Bullische Kerzen<br>
     📥 Entry sofort<br>
     🎯 TP +0.3%<br>
-    🛡️ Kein SL (Cross Margin)<br>
+    🛑 SL -1.5% (einstellbar)<br>
     📊 86.9% Trefferrate<br>
     ⏱️ Ø 25 Min bis TP
   </div>
@@ -315,6 +320,10 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
         <div class="pos-item">
           <div class="pos-item-label">Aktuell</div>
           <div class="pos-item-val" id="posCurrent">—</div>
+        </div>
+        <div class="pos-item">
+          <div class="pos-item-label">Stop Loss</div>
+          <div class="pos-item-val red" id="posSL">—</div>
         </div>
         <div class="pos-item">
           <div class="pos-item-label">Take Profit</div>
@@ -668,14 +677,12 @@ function checkAccountSafety() {
 async function monitorTrade(trade) {
   const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
 
-  // SL = 1.5% – weit genug weg um 80%+ Trefferrate nicht zu stören
-  // Aus 5 Jahren Daten: Ø Max-Gegenbewegung bei OB Trades = 0.8%
-  // 1.5% = fast doppelter Puffer → stört den Trade nicht!
-  const SL_PCT   = 0.015;
+  // SL aus Dashboard (einstellbar vom User)
+  const SL_PCT   = parseFloat(document.getElementById('slPct').value) / 100;
   const sl_price = trade.entry * (1 - SL_PCT);
   const sl_usd   = trade.notional * SL_PCT;
 
-  log(`📊 Trade offen | Entry: $${trade.entry.toFixed(2)} | TP: $${trade.tp.toFixed(2)} (+${(tp_pct*100).toFixed(1)}%) | SL: $${sl_price.toFixed(2)} (-1.5%)`, 'info');
+  log(`📊 Trade offen | Entry: $${trade.entry.toFixed(2)} | TP: $${trade.tp.toFixed(2)} (+${(tp_pct*100).toFixed(1)}%) | SL: $${sl_price.toFixed(2)} (-${(SL_PCT*100).toFixed(1)}%)`, 'info');
   log(`💰 Max Risiko: $${sl_usd.toFixed(2)} | Gewinn wenn TP: $${(trade.notional*tp_pct).toFixed(2)}`, 'info');
 
   const checkInterval = setInterval(async () => {
@@ -878,6 +885,7 @@ function updatePositionPanel(trade, price) {
   document.getElementById('posEntry').textContent   = '$' + trade.entry.toFixed(2);
   document.getElementById('posCurrent').textContent = '$' + price.toFixed(2);
   document.getElementById('posTP').textContent      = '$' + trade.tp.toFixed(2);
+  document.getElementById('posSL').textContent      = '$' + (trade.entry * (1 - parseFloat(document.getElementById('slPct').value)/100)).toFixed(2);
   document.getElementById('posNotional').textContent = '$' + trade.notional.toFixed(0);
   document.getElementById('posTime').textContent    = elapsed + ' Min';
   document.getElementById('posPnl').textContent     = '$' + pnl.toFixed(2);
@@ -905,7 +913,7 @@ async function toggleBot() {
 
   isRunning = true;
   document.getElementById('startBtn').textContent = '⏸ PAUSE';
-  document.getElementById('stopBtn').style.display = 'block';
+  
   document.getElementById('statusDot').className = 'dot live';
   document.getElementById('statusText').textContent = mode === 'testnet' ? 'Live Daten · Testnet Orders' : 'LIVE TRADING';
 
@@ -931,7 +939,7 @@ function stopBot() {
 
   document.getElementById('startBtn').textContent = '▶ START';
   document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').style.display = 'none';
+  
   document.getElementById('statusDot').className = 'dot off';
   document.getElementById('statusText').textContent = 'Gestoppt – Warte auf START';
   document.getElementById('signalBadge').className = 'signal-badge off';
@@ -953,7 +961,7 @@ async function stopAll() {
 
   document.getElementById('startBtn').textContent = '▶ START';
   document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').style.display = 'none';
+  
   document.getElementById('statusDot').className = 'dot off';
   document.getElementById('statusText').textContent = 'GESTOPPT – Alle Trades geschlossen';
   document.getElementById('signalBadge').className = 'signal-badge off';
