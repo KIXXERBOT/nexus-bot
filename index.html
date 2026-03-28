@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -602,8 +601,6 @@ function detectOrderBlock(candles) {
   const len = candles.length;
   const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
 
-  // Suche in letzten 12 abgeschlossenen Kerzen
-  // Kerze[len-1] = aktuelle laufende → NICHT verwenden
   for (let i = len-6; i >= Math.max(1, len-14); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
@@ -617,10 +614,24 @@ function detectOrderBlock(candles) {
       const move = (b3.close - ob.low) / ob.low * 100;
       if (move >= 0.08) {
         const key = ob.ts + '_L';
-        if (lastOBTimestamp === key) continue; // Bereits getradet!
-        return { direction:'LONG', entry:b1.open, tp_pct, 
-                 detected_at:new Date().toLocaleTimeString(),
-                 move_pct:move.toFixed(3), ob_key:key };
+        if (lastOBTimestamp === key) continue;
+
+        // TP vom OB Low berechnen (nicht vom Entry!)
+        // OB Low = wo der MM gekauft hat
+        // TP = OB Low + TP% = echter Zielpreis
+        const tp_price = ob.low * (1 + tp_pct);
+
+        return {
+          direction:   'LONG',
+          entry:       b1.open,
+          tp_price:    tp_price,   // ← Exakter TP vom OB!
+          tp_pct:      tp_pct,
+          ob_low:      ob.low,
+          ob_high:     ob.high,
+          detected_at: new Date().toLocaleTimeString(),
+          move_pct:    move.toFixed(3),
+          ob_key:      key,
+        };
       }
     }
 
@@ -629,10 +640,22 @@ function detectOrderBlock(candles) {
       const move = (ob.high - b3.close) / ob.high * 100;
       if (move >= 0.08) {
         const key = ob.ts + '_S';
-        if (lastOBTimestamp === key) continue; // Bereits getradet!
-        return { direction:'SHORT', entry:b1.open, tp_pct,
-                 detected_at:new Date().toLocaleTimeString(),
-                 move_pct:move.toFixed(3), ob_key:key };
+        if (lastOBTimestamp === key) continue;
+
+        // TP vom OB High berechnen (nicht vom Entry!)
+        const tp_price = ob.high * (1 - tp_pct);
+
+        return {
+          direction:   'SHORT',
+          entry:       b1.open,
+          tp_price:    tp_price,   // ← Exakter TP vom OB!
+          tp_pct:      tp_pct,
+          ob_low:      ob.low,
+          ob_high:     ob.high,
+          detected_at: new Date().toLocaleTimeString(),
+          move_pct:    move.toFixed(3),
+          ob_key:      key,
+        };
       }
     }
   }
@@ -653,18 +676,33 @@ async function executeTrade(ob) {
     return;
   }
 
-  const margin   = capital * tradePct;
-  const notional = margin * leverage;
+  const margin    = capital * tradePct;
+  const notional  = margin * leverage;
   const direction = ob.direction || 'LONG';
   const side      = direction === 'LONG' ? 'Buy' : 'Sell';
-  const tp_price  = direction === 'LONG'
+
+  // TP vom OB Preis (nicht vom Entry!)
+  // ob.tp_price ist bereits korrekt vom OB Low/High berechnet
+  const tp_price = ob.tp_price || (direction === 'LONG'
     ? ob.entry * (1 + ob.tp_pct)
-    : ob.entry * (1 - ob.tp_pct);
+    : ob.entry * (1 - ob.tp_pct));
+
+  // SL vom Entry
+  const sl_pct   = parseFloat(document.getElementById('slPct').value) / 100;
+  const sl_price = direction === 'LONG'
+    ? ob.entry * (1 - sl_pct)
+    : ob.entry * (1 + sl_pct);
+
   const qty = (notional / ob.entry).toFixed(3);
 
-  log(`💰 Trade: $${margin.toFixed(2)} × ${leverage}× = $${notional.toFixed(0)} Notional`, 'ok');
-  log(`📊 ${direction} Order Block | Move: ${ob.move_pct}%`, 'ok');
-  log(`📥 Entry: $${ob.entry.toFixed(2)} | TP: $${tp_price.toFixed(2)} | ${direction}`, 'ok');
+  // Zeige Unterschied OB-TP vs Entry-TP
+  const entry_tp = direction === 'LONG'
+    ? ob.entry * (1 + ob.tp_pct)
+    : ob.entry * (1 - ob.tp_pct);
+  const diff = Math.abs(tp_price - entry_tp).toFixed(2);
+
+  log(`💰 ${direction} | Entry: $${ob.entry.toFixed(2)} | OB-TP: $${tp_price.toFixed(2)} | SL: $${sl_price.toFixed(2)}`, 'ok');
+  log(`📊 OB-Basis: $${(direction==='LONG'?ob.ob_low:ob.ob_high).toFixed(2)} | Move: +${ob.move_pct}% | TP Offset: $${diff}`, 'ok');
 
   // Leverage setzen
   await bybitPost('/v5/position/set-leverage', {
@@ -693,11 +731,14 @@ async function executeTrade(ob) {
     id:        result.orderId,
     direction: direction,
     entry:     ob.entry,
-    tp:        tp_price,
+    tp:        tp_price,   // OB-basierter TP!
+    sl:        sl_price,   // Entry-basierter SL
     qty:       parseFloat(qty),
     notional:  notional,
     margin:    margin,
     leverage:  leverage,
+    ob_low:    ob.ob_low,
+    ob_high:   ob.ob_high,
     openTime:  Date.now(),
     openStr:   new Date().toLocaleTimeString(),
     status:    'open',
@@ -709,7 +750,7 @@ async function executeTrade(ob) {
   stats.obCount++;
   updateUI();
 
-  log(`✅ ${direction} Trade #${result.orderId.slice(-6)} offen | $${notional.toFixed(0)} Notional`, 'ok');
+  log(`✅ ${direction} #${result.orderId.slice(-6)} | Entry:$${ob.entry.toFixed(2)} | OB-TP:$${tp_price.toFixed(2)} | SL:$${sl_price.toFixed(2)}`, 'ok');
   document.getElementById('obCount').textContent = stats.obCount;
 
   monitorTrade(trade);
@@ -931,9 +972,7 @@ async function scanLoop() {
     document.getElementById('signalBadge').textContent = ob.direction === 'LONG' ? '▲ LONG OB' : '▼ SHORT OB';
     document.getElementById('lastOBTime').textContent  = ob.detected_at;
     document.getElementById('lastEntry').textContent   = '$' + ob.entry.toFixed(2);
-    document.getElementById('lastTP').textContent      = '$' + (ob.direction === 'LONG'
-      ? ob.entry * (1 + ob.tp_pct)
-      : ob.entry * (1 - ob.tp_pct)).toFixed(2);
+    document.getElementById('lastTP').textContent      = '$' + ob.tp_price.toFixed(2) + ' (OB)';
 
     const key = document.getElementById('apiKey').value.trim();
     if (key) {
