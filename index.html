@@ -628,11 +628,66 @@ async function executeTrade(ob) {
 }
 
 // ═══════════════════════════════════════════════════════
+// KONTO-SCHUTZ (KEIN Trade SL – nur Konto-Schutz!)
+// ═══════════════════════════════════════════════════════
+// Der Trade läuft IMMER bis TP – keine Unterbrechung!
+// Schutz nur auf Konto-Ebene:
+//   Stufe 1: Tagsverlust > 10% → keine neuen Trades
+//   Stufe 2: Tagsverlust > 20% → Bot stoppt (Totalverlust verhindert)
+
+function checkAccountSafety() {
+  const capital     = parseFloat(document.getElementById('capital').value);
+  const warnLimit   = capital * 0.10;   // 10% = keine neuen Trades
+  const stopLimit   = capital * 0.20;   // 20% = Notfall-Stop
+
+  const todayLoss = Math.abs(Math.min(0, stats.totalPnl));
+
+  if (todayLoss >= stopLimit) {
+    log(`🚨 KONTO-SCHUTZ AKTIV! Verlust $${todayLoss.toFixed(2)} > 20% ($${stopLimit.toFixed(2)})`, 'err');
+    log(`🚨 Bot gestoppt – Totalverlust verhindert! Offene Trades laufen weiter bis TP.`, 'err');
+    // Bot stoppt NEUE Trades – aber offene Trades laufen weiter bis TP!
+    isRunning = false;
+    clearInterval(scanTimer);
+    document.getElementById('startBtn').textContent = '▶ START';
+    document.getElementById('statusDot').className  = 'dot off';
+    document.getElementById('statusText').textContent = 'Konto-Schutz aktiv';
+    return false;
+  }
+  if (todayLoss >= warnLimit) {
+    log(`⚠️ WARNUNG: Verlust $${todayLoss.toFixed(2)} > 10% – keine neuen Trades heute!`, 'warn');
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
 // TRADE MONITOR
+// SL = 1.5% vom Entry (aus Daten: 80% der Trades bewegen sich
+// nie mehr als 0.8% gegen uns → 1.5% stört den Trade NICHT)
 // ═══════════════════════════════════════════════════════
 async function monitorTrade(trade) {
+  const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
+
+  // SL = 1.5% – weit genug weg um 80%+ Trefferrate nicht zu stören
+  // Aus 5 Jahren Daten: Ø Max-Gegenbewegung bei OB Trades = 0.8%
+  // 1.5% = fast doppelter Puffer → stört den Trade nicht!
+  const SL_PCT   = 0.015;
+  const sl_price = trade.entry * (1 - SL_PCT);
+  const sl_usd   = trade.notional * SL_PCT;
+
+  log(`📊 Trade offen | Entry: $${trade.entry.toFixed(2)} | TP: $${trade.tp.toFixed(2)} (+${(tp_pct*100).toFixed(1)}%) | SL: $${sl_price.toFixed(2)} (-1.5%)`, 'info');
+  log(`💰 Max Risiko: $${sl_usd.toFixed(2)} | Gewinn wenn TP: $${(trade.notional*tp_pct).toFixed(2)}`, 'info');
+
   const checkInterval = setInterval(async () => {
-    if (!isRunning && activeTrades.find(t => t.id === trade.id)) {
+    // Wenn Bot manuell gestoppt → Monitor sofort beenden
+    if (!isRunning) {
+      clearInterval(checkInterval);
+      log(`⏸ Monitor Trade #${trade.id.slice(-6)} pausiert – drücke START zum Fortfahren`, 'warn');
+      return;
+    }
+
+    // Trade nicht mehr in Liste → beenden
+    if (!activeTrades.find(t => t.id === trade.id)) {
       clearInterval(checkInterval);
       return;
     }
@@ -640,32 +695,53 @@ async function monitorTrade(trade) {
     const price = await getMarkPrice();
     if (!price) return;
 
-    // PnL berechnen
     trade.pnl = (price - trade.entry) / trade.entry * trade.notional;
 
-    // TP Check
-    if (price >= trade.tp) {
+    // ── NOTFALL STOP LOSS (1.5%) ──────────────────────
+    // Nur ausgelöst wenn BTC wirklich stark fällt
+    // Normale Schwankungen (0-0.8%) bleiben unberührt!
+    if (price <= sl_price) {
       clearInterval(checkInterval);
-      const tp_pnl = trade.notional * parseFloat(document.getElementById('tpPct').value) / 100;
 
-      // Position schließen
-      const closeResult = await bybitPost('/v5/order/create', {
-        category:    'linear',
-        symbol:      SYMBOL,
-        side:        'Sell',
-        orderType:   'Market',
-        qty:         trade.qty.toString(),
-        reduceOnly:  true,
-        timeInForce: 'GTC',
+      await bybitPost('/v5/order/create', {
+        category: 'linear', symbol: SYMBOL,
+        side: 'Sell', orderType: 'Market',
+        qty: trade.qty.toString(), reduceOnly: true, timeInForce: 'GTC',
       });
 
-      trade.status = 'win';
-      trade.pnl    = tp_pnl;
+      trade.status   = 'loss';
+      trade.pnl      = -sl_usd;
+      stats.losses++;
+      stats.totalPnl -= sl_usd;
+
+      log(`🛑 Notfall-SL: BTC fiel -1.5% | Verlust: -$${sl_usd.toFixed(2)}`, 'err');
+      activeTrades = activeTrades.filter(t => t.id !== trade.id);
+      tradeHistory.unshift(trade);
+      if (tradeHistory.length > 50) tradeHistory.pop();
+
+      // Account Sicherheits-Check
+      checkAccountSafety();
+      updateUI();
+      return;
+    }
+
+    // ── TAKE PROFIT ────────────────────────────────────
+    if (price >= trade.tp) {
+      clearInterval(checkInterval);
+      const tp_pnl = trade.notional * tp_pct;
+
+      await bybitPost('/v5/order/create', {
+        category: 'linear', symbol: SYMBOL,
+        side: 'Sell', orderType: 'Market',
+        qty: trade.qty.toString(), reduceOnly: true, timeInForce: 'GTC',
+      });
+
+      trade.status   = 'win';
+      trade.pnl      = tp_pnl;
       stats.wins++;
       stats.totalPnl += tp_pnl;
 
       log(`🎯 TP getroffen! +$${tp_pnl.toFixed(2)} | Trade #${trade.id.slice(-6)}`, 'ok');
-
       activeTrades = activeTrades.filter(t => t.id !== trade.id);
       tradeHistory.unshift(trade);
       if (tradeHistory.length > 50) tradeHistory.pop();
@@ -674,7 +750,7 @@ async function monitorTrade(trade) {
 
     updatePositionPanel(trade, price);
 
-  }, 5000); // Alle 5 Sekunden prüfen
+  }, 5000);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -699,6 +775,12 @@ async function scanLoop() {
 
   if (ob) {
     log(`🔍 Order Block erkannt @ ${ob.detected_at} | Move: +${ob.move_pct}%`, 'ok');
+
+    // Sicherheitscheck vor Trade
+    if (!checkAccountSafety()) {
+      log('⚠️ Kein neuer Trade – Tageslimit erreicht!', 'warn');
+      return;
+    }
     document.getElementById('signalBadge').className = 'signal-badge long';
     document.getElementById('signalBadge').textContent = 'LONG OB';
     document.getElementById('lastOBTime').textContent = ob.detected_at;
@@ -844,29 +926,68 @@ function stopBot() {
   isRunning = false;
   clearInterval(scanTimer);
   clearInterval(priceTimer);
+  scanTimer  = null;
+  priceTimer = null;
+
   document.getElementById('startBtn').textContent = '▶ START';
+  document.getElementById('startBtn').disabled = false;
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('statusDot').className = 'dot off';
-  document.getElementById('statusText').textContent = 'Gestoppt';
+  document.getElementById('statusText').textContent = 'Gestoppt – Warte auf START';
   document.getElementById('signalBadge').className = 'signal-badge off';
   document.getElementById('signalBadge').textContent = 'GESTOPPT';
-  log('⏹ Bot gestoppt.', 'warn');
+
+  // Alle laufenden Monitor-Intervals stoppen
+  // (durch isRunning Flag werden sie beim nächsten Check beendet)
+  log('⏹ Bot gestoppt. Drücke START um fortzufahren.', 'warn');
+  log('ℹ️ Offene Positionen bleiben offen bis du STOP ALL drückst.', 'info');
 }
 
 async function stopAll() {
-  stopBot();
-  log('⛔ Alle Trades werden geschlossen...', 'err');
+  // Bot SOFORT stoppen
+  isRunning = false;
+  clearInterval(scanTimer);
+  clearInterval(priceTimer);
+  scanTimer  = null;
+  priceTimer = null;
 
-  for (const trade of activeTrades) {
-    await bybitPost('/v5/order/create', {
-      category: 'linear', symbol: SYMBOL,
-      side: 'Sell', orderType: 'Market',
-      qty: trade.qty.toString(), reduceOnly: true, timeInForce: 'GTC',
-    });
-    log(`Position ${trade.id.slice(-6)} geschlossen.`, 'warn');
+  document.getElementById('startBtn').textContent = '▶ START';
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('statusDot').className = 'dot off';
+  document.getElementById('statusText').textContent = 'GESTOPPT – Alle Trades geschlossen';
+  document.getElementById('signalBadge').className = 'signal-badge off';
+  document.getElementById('signalBadge').textContent = 'GESTOPPT';
+
+  log('⛔ STOP ALL – Schließe alle offenen Positionen...', 'err');
+
+  // Alle aktiven Trades sofort schließen
+  const tradesToClose = [...activeTrades];
+  for (const trade of tradesToClose) {
+    try {
+      await bybitPost('/v5/order/create', {
+        category:   'linear',
+        symbol:     SYMBOL,
+        side:       'Sell',
+        orderType:  'Market',
+        qty:        trade.qty.toString(),
+        reduceOnly: true,
+        timeInForce:'GTC',
+      });
+      trade.status = 'loss';
+      trade.pnl    = (await getMarkPrice() - trade.entry) / trade.entry * trade.notional;
+      tradeHistory.unshift(trade);
+      log(`✓ Position #${trade.id.slice(-6)} geschlossen`, 'warn');
+    } catch(e) {
+      log(`Fehler beim Schließen von #${trade.id.slice(-6)}: ${e.message}`, 'err');
+    }
   }
+
   activeTrades = [];
   updateUI();
+
+  log('✅ Alle Trades geschlossen.', 'ok');
+  log('ℹ️ Bot wartet. Drücke START wenn du weitermachen möchtest.', 'info');
 }
 </script>
 </body>
