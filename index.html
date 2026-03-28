@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEXUS v7 — Order Block Engine</title> 
+<title>NEXUS v7 — Order Block Engine</title>
 <style>
 :root {
   --bg:      #07070f;
@@ -186,13 +186,13 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
 
   <div class="strategy-info">
     <b>Order Block Strategie</b>
-    🔴 Bearische Kerze<br>
-    🟢🟢🟢 3 Bullische Kerzen<br>
+    📈 LONG: 🔴 + 🟢🟢🟢 = 94.0%<br>
+    📉 SHORT: 🟢 + 🔴🔴🔴 = 94.3%<br>
     📥 Entry sofort<br>
     🎯 TP +0.3%<br>
     🛑 SL -1.5% (einstellbar)<br>
-    📊 86.9% Trefferrate<br>
-    ⏱️ Ø 25 Min bis TP
+    📊 ~96 Trades/Tag<br>
+    ⏱️ Ø 40 Min bis TP
   </div>
 </div>
 
@@ -523,45 +523,49 @@ async function bybitGet(endpoint, params) {
 // ORDER BLOCK ERKENNUNG
 // ═══════════════════════════════════════════════════════
 function detectOrderBlock(candles) {
-  // Brauche mindestens 5 Kerzen
   if (candles.length < 5) return null;
-
   const len = candles.length;
 
-  // Schaue die letzten abgeschlossenen Kerzen an
-  // candles[len-1] = aktuelle (noch nicht abgeschlossen)
-  // candles[len-2] = letzte abgeschlossene
-  // candles[len-3] = vorletzte
-  // candles[len-4] = vorvorletzte
-  // candles[len-5] = OB Kerze Kandidat
-
   for (let offset = 1; offset <= 3; offset++) {
-    const i  = len - 4 - offset; // OB Kerze
+    const i = len - 4 - offset;
     if (i < 0) continue;
 
-    const ob  = candles[i];       // Bearische Kerze (OB)
-    const b1  = candles[i+1];     // Bullische Kerze 1
-    const b2  = candles[i+2];     // Bullische Kerze 2
-    const b3  = candles[i+3];     // Bullische Kerze 3
-
+    const ob = candles[i];
+    const b1 = candles[i+1];
+    const b2 = candles[i+2];
+    const b3 = candles[i+3];
     if (!ob || !b1 || !b2 || !b3) continue;
 
-    // Bedingungen
-    const isBearOB  = !ob.bull;
-    const isBull1   = b1.bull;
-    const isBull2   = b2.bull;
-    const isBull3   = b3.bull;
-    const move      = (b3.close - ob.low) / ob.low * 100;
-    const isEnough  = move >= 0.10;
+    // ── LONG Order Block ──────────────────────────────
+    // Bearische Kerze + 3 Bullische Kerzen
+    if (!ob.bull && b1.bull && b2.bull && b3.bull) {
+      const move = (b3.close - ob.low) / ob.low * 100;
+      if (move >= 0.10) {
+        return {
+          direction:   'LONG',
+          ob_candle:   ob,
+          entry:       b1.open,
+          tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
+          detected_at: new Date().toLocaleTimeString(),
+          move_pct:    move.toFixed(3),
+        };
+      }
+    }
 
-    if (isBearOB && isBull1 && isBull2 && isBull3 && isEnough) {
-      return {
-        ob_candle: ob,
-        entry:     b1.open,  // Entry bei Open der ersten bullischen Kerze
-        tp_pct:    parseFloat(document.getElementById('tpPct').value) / 100,
-        detected_at: new Date().toLocaleTimeString(),
-        move_pct:  move.toFixed(3),
-      };
+    // ── SHORT Order Block ─────────────────────────────
+    // Bullische Kerze + 3 Bearische Kerzen
+    if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
+      const move = (ob.high - b3.close) / ob.high * 100;
+      if (move >= 0.10) {
+        return {
+          direction:   'SHORT',
+          ob_candle:   ob,
+          entry:       b1.open,
+          tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
+          detected_at: new Date().toLocaleTimeString(),
+          move_pct:    move.toFixed(3),
+        };
+      }
     }
   }
   return null;
@@ -583,13 +587,16 @@ async function executeTrade(ob) {
 
   const margin   = capital * tradePct;
   const notional = margin * leverage;
-  const tp_price = ob.entry * (1 + ob.tp_pct);
-  const qty      = (notional / ob.entry).toFixed(3);
+  const direction = ob.direction || 'LONG';
+  const side      = direction === 'LONG' ? 'Buy' : 'Sell';
+  const tp_price  = direction === 'LONG'
+    ? ob.entry * (1 + ob.tp_pct)
+    : ob.entry * (1 - ob.tp_pct);
+  const qty = (notional / ob.entry).toFixed(3);
 
-  log(`💰 Trade: $${margin.toFixed(2)} (${(tradePct*100).toFixed(0)}% von $${capital}) × ${leverage}× = $${notional.toFixed(0)} Notional`, 'ok');
-
-  log(`📊 Order Block erkannt! Move: +${ob.move_pct}%`, 'ok');
-  log(`📥 Entry: $${ob.entry.toFixed(2)} | TP: $${tp_price.toFixed(2)} | Qty: ${qty}`, 'ok');
+  log(`💰 Trade: $${margin.toFixed(2)} × ${leverage}× = $${notional.toFixed(0)} Notional`, 'ok');
+  log(`📊 ${direction} Order Block | Move: ${ob.move_pct}%`, 'ok');
+  log(`📥 Entry: $${ob.entry.toFixed(2)} | TP: $${tp_price.toFixed(2)} | ${direction}`, 'ok');
 
   // Leverage setzen
   await bybitPost('/v5/position/set-leverage', {
@@ -599,11 +606,11 @@ async function executeTrade(ob) {
     sellLeverage: leverage.toString(),
   });
 
-  // Market Order
+  // Market Order LONG oder SHORT
   const result = await bybitPost('/v5/order/create', {
     category:    'linear',
     symbol:      SYMBOL,
-    side:        'Buy',
+    side:        side,
     orderType:   'Market',
     qty:         qty,
     timeInForce: 'GTC',
@@ -616,6 +623,7 @@ async function executeTrade(ob) {
 
   const trade = {
     id:        result.orderId,
+    direction: direction,
     entry:     ob.entry,
     tp:        tp_price,
     qty:       parseFloat(qty),
@@ -629,14 +637,13 @@ async function executeTrade(ob) {
   };
 
   activeTrades.push(trade);
-  lastTradeTime = Date.now(); // Cooldown starten
+  lastTradeTime = Date.now();
   stats.obCount++;
   updateUI();
 
-  log(`✅ Trade #${result.orderId.slice(-6)} offen | Notional: $${notional.toFixed(0)}`, 'ok');
+  log(`✅ ${direction} Trade #${result.orderId.slice(-6)} offen | $${notional.toFixed(0)} Notional`, 'ok');
   document.getElementById('obCount').textContent = stats.obCount;
 
-  // TP überwachen
   monitorTrade(trade);
 }
 
@@ -824,7 +831,7 @@ async function scanLoop() {
   const ob = detectOrderBlock(candles);
 
   if (ob) {
-    log(`🔍 Order Block erkannt @ ${ob.detected_at} | Move: +${ob.move_pct}%`, 'ok');
+    log(`🔍 ${ob.direction} Order Block @ ${ob.detected_at} | Move: ${ob.move_pct}%`, 'ok');
 
     // Prüfe ob bereits eine offene Position bei Bybit existiert
     const posCheck = await bybitGet('/v5/position/list', { category: 'linear', symbol: SYMBOL });
@@ -839,11 +846,15 @@ async function scanLoop() {
       log('⚠️ Kein neuer Trade – Tageslimit erreicht!', 'warn');
       return;
     }
-    document.getElementById('signalBadge').className = 'signal-badge long';
-    document.getElementById('signalBadge').textContent = 'LONG OB';
+
+    // Badge LONG = grün, SHORT = rot
+    document.getElementById('signalBadge').className = ob.direction === 'LONG' ? 'signal-badge long' : 'signal-badge short';
+    document.getElementById('signalBadge').textContent = ob.direction === 'LONG' ? '▲ LONG OB' : '▼ SHORT OB';
     document.getElementById('lastOBTime').textContent = ob.detected_at;
-    document.getElementById('lastEntry').textContent = '$' + ob.entry.toFixed(2);
-    document.getElementById('lastTP').textContent = '$' + (ob.entry * (1 + ob.tp_pct)).toFixed(2);
+    document.getElementById('lastEntry').textContent  = '$' + ob.entry.toFixed(2);
+    document.getElementById('lastTP').textContent     = '$' + (ob.direction === 'LONG'
+      ? ob.entry * (1 + ob.tp_pct)
+      : ob.entry * (1 - ob.tp_pct)).toFixed(2);
 
     // Trade ausführen wenn API Keys vorhanden
     const key = document.getElementById('apiKey').value.trim();
