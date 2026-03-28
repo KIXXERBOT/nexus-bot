@@ -523,44 +523,49 @@ async function bybitGet(endpoint, params) {
 // ORDER BLOCK ERKENNUNG
 // ═══════════════════════════════════════════════════════
 function detectOrderBlock(candles) {
-  if (candles.length < 5) return null;
+  if (candles.length < 6) return null;
   const len = candles.length;
 
-  // Suche in den letzten 10 abgeschlossenen Kerzen nach OB
-  // Letzte Kerze (len-1) noch nicht abgeschlossen → überspringen
-  for (let i = len - 5; i >= Math.max(0, len - 12); i--) {
+  // Suche in den letzten 12 ABGESCHLOSSENEN Kerzen
+  // Kerze[len-1] = aktuelle noch laufende → NICHT verwenden
+  // Kerze[len-2] = letzte abgeschlossene → Start
+  
+  for (let i = len-6; i >= Math.max(1, len-14); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
     const b2 = candles[i+2];
     const b3 = candles[i+3];
-    if (!ob || !b1 || !b2 || !b3) continue;
 
-    // ── LONG Order Block ──────────────────────────────
+    if (!ob || !b1 || !b2 || !b3) continue;
+    // Sicherstellen dass alle Kerzen gültige Daten haben
+    if (!ob.open || !b1.open || !b2.open || !b3.open) continue;
+
+    // ── LONG: Bearisch + 3× Bullisch ──────────────────
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
-      if (move >= 0.08) {  // 0.08% statt 0.10% – etwas sensibler
+      if (move >= 0.08) {
         return {
           direction:   'LONG',
-          ob_candle:   ob,
           entry:       b1.open,
           tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
           detected_at: new Date().toLocaleTimeString(),
           move_pct:    move.toFixed(3),
+          candle_idx:  i,
         };
       }
     }
 
-    // ── SHORT Order Block ─────────────────────────────
+    // ── SHORT: Bullisch + 3× Bearisch ─────────────────
     if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
       const move = (ob.high - b3.close) / ob.high * 100;
       if (move >= 0.08) {
         return {
           direction:   'SHORT',
-          ob_candle:   ob,
           entry:       b1.open,
           tp_pct:      parseFloat(document.getElementById('tpPct').value) / 100,
           detected_at: new Date().toLocaleTimeString(),
           move_pct:    move.toFixed(3),
+          candle_idx:  i,
         };
       }
     }
