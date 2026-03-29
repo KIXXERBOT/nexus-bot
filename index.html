@@ -71,12 +71,14 @@ body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);
   <div class="f"><label>Bybit API Secret</label><input type="password" id="apiSecret" placeholder="API Secret" onblur="onKeyBlur()"></div>
   <div class="div"></div>
   <div style="font-size:9px;color:var(--gold);text-transform:uppercase;letter-spacing:1px">⚙️ Trade Setup</div>
-  <div class="f"><label>Kapital (USDT)</label><input type="number" id="capital" value="80" min="10" oninput="calc()"></div>
-  <div class="f"><label>Trade % vom Kapital</label><input type="number" id="tradePct" value="50" min="1" max="100" oninput="calc()"><small class="g" id="tradeCalc">= $40 Margin</small></div>
+  <div class="f"><label>Kapital (USDT)</label><input type="number" id="capital" value="180" min="10" oninput="calc()"></div>
+  <div class="f"><label>Trade % vom Kapital</label><input type="number" id="tradePct" value="100" min="1" max="100" oninput="calc()"><small class="g" id="tradeCalc">= $40 Margin</small></div>
   <div class="f"><label>Leverage</label><input type="number" id="leverage" value="20" min="1" max="50" oninput="calc()"><small class="g" id="notionalCalc">= $800 Notional</small></div>
   <div class="f"><label>Stop Loss %</label><input type="number" id="slPct" value="1.5" step="0.1" min="0.3"></div>
-  <div class="f"><label>TP Multiplier (× OB)</label><input type="number" id="tpMult" value="5" step="0.5" min="1" max="20" oninput="calc()"><small class="g" id="tpInfo">5× → 90.1% WR | Ø +$2.24</small></div>
+  <div class="f"><label>Ziel-Gewinn pro Stunde ($)</label><input type="number" id="targetHour" value="20" min="1" oninput="calc()"><small class="g" id="tpInfo">Auto-TP für $20/h</small></div>
+  <div class="f"><label>TP Multiplier (× OB)</label><input type="number" id="tpMult" value="5" step="0.5" min="1" max="20" oninput="calc()"><small class="g" id="tpMult2">5× → 90.1% WR</small></div>
   <div class="f"><label>Max Trades gleichzeitig</label><input type="number" id="maxTrades" value="1" min="1" max="3"></div>
+  <div class="f"><label>Max Trade Dauer (Min)</label><input type="number" id="maxTradeMin" value="60" min="5" max="240"><small class="g">Bei Überschreitung: Auto-Close</small></div>
   <div class="div"></div>
   <div style="font-size:9px;color:var(--gold);text-transform:uppercase;letter-spacing:1px">🛡️ Tages-Schutz</div>
   <div class="f"><label>Stop bei Verlust %</label><input type="number" id="dayLimit" value="20" min="0"><small>0 = deaktiviert</small></div>
@@ -160,7 +162,7 @@ body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);
 <script>
 const SYMBOL='BTCUSDT',BASE='https://api.bybit.com',SCAN_MS=15000,SYNC_MS=1000,PRICE_MS=500;
 let isRunning=false,scanTimer=null,syncStarted=false;
-let tradedOBs=new Set(),currentTP=0,currentSL=0;
+let tradedOBs=new Set(),currentTP=0,currentSL=0,lastAnalysis=null;
 let tradeHistory=[],tradeCount=0,openTime=0;
 let stats={wins:0,losses:0};
 
@@ -172,16 +174,23 @@ function log(m,t='info'){
 }
 
 function calc(){
-  const cap=parseFloat(document.getElementById('capital').value)||80;
-  const pct=parseFloat(document.getElementById('tradePct').value)||50;
+  const cap=parseFloat(document.getElementById('capital').value)||180;
+  const pct=parseFloat(document.getElementById('tradePct').value)||100;
   const lev=parseInt(document.getElementById('leverage').value)||20;
   const mult=parseFloat(document.getElementById('tpMult').value)||5;
+  const target=parseFloat(document.getElementById('targetHour')?.value||20);
   const margin=cap*pct/100,notional=margin*lev,fee=notional*0.0011;
   const avgTP=0.078*mult,netto=notional*avgTP/100-fee;
   const wr=mult<=1?99.8:mult<=2?98:mult<=3?95.5:mult<=4?92.7:mult<=5?90.1:mult<=8?83.3:79.5;
+  const tradesPerHour=7;
+  const netPerHour=tradesPerHour*(wr/100)*netto - tradesPerHour*(1-wr/100)*(notional*0.015+fee);
   document.getElementById('tradeCalc').textContent='= $'+margin.toFixed(0)+' Margin';
-  document.getElementById('notionalCalc').textContent='= $'+notional.toFixed(0)+' Notional | Netto: $'+netto.toFixed(2);
-  document.getElementById('tpInfo').textContent=mult+'× → ~'+wr+'% WR | Ø Netto: $'+netto.toFixed(2);
+  document.getElementById('notionalCalc').textContent='= $'+notional.toFixed(0)+' Notional | Ø $'+netto.toFixed(2)+'/Trade';
+  document.getElementById('tpInfo').textContent='Ø $'+netPerHour.toFixed(1)+'/h bei '+wr+'% WR';
+  // Zeige ob Ziel erreichbar
+  const feasible=netPerHour>=target*0.8;
+  if(document.getElementById('tpInfo'))
+    document.getElementById('tpInfo').style.color=feasible?'var(--green)':'var(--red)';
 }
 calc();
 
@@ -360,12 +369,32 @@ async function syncPosition(){
     document.getElementById('progFill').style.background=unPnl>=0?'var(--green)':'var(--red)';
     document.getElementById('progL').textContent='Entry $'+entry.toFixed(0);
     document.getElementById('progR').textContent='TP $'+tp.toFixed(0);
-    // Auto-Close nach 2 Stunden (Schutz vor endlosen Verlusttrades)
-    if(isRunning&&openTime>0&&(Date.now()-openTime)>120*60*1000){
-      log('⏰ Trade >2h offen – automatisch schließen!','err');
+    // ── AUTO-CLOSE SYSTEM ────────────────────────────────
+    const tradeDir = side==='Buy'?'LONG':'SHORT';
+    const tradeAge = openTime>0?(Date.now()-openTime):0;
+    const maxTime  = parseInt(document.getElementById('maxTradeMin').value||60)*60*1000;
+
+    // Feature 1: Max Zeit überschritten → schließen
+    if(isRunning&&tradeAge>maxTime&&maxTime>0){
+      log('⏰ Max-Zeit überschritten ('+Math.floor(tradeAge/60000)+'min) – schließe Trade!','err');
       await closePos(size.toString(),side);
       stats.losses++;addHistory(entry,tp,unPnl,'loss');
       currentTP=0;currentSL=0;openTime=0;updateStats();return;
+    }
+
+    // Feature 2: Trend-Umkehr erkannt → schließen
+    // Wenn LONG offen aber starker Abwärtstrend → Exit!
+    if(isRunning&&tradeAge>2*60*1000){ // Min 2 Min warten
+      const trendReverse = lastAnalysis && (
+        (tradeDir==='LONG'  && lastAnalysis.rsi>70 && mark<entry*0.998) ||
+        (tradeDir==='SHORT' && lastAnalysis.rsi<30 && mark>entry*1.002)
+      );
+      if(trendReverse){
+        log('🔄 Trend-Umkehr erkannt – schließe '+tradeDir+' Trade!','err');
+        await closePos(size.toString(),side);
+        stats.losses++;addHistory(entry,tp,unPnl,'loss');
+        currentTP=0;currentSL=0;openTime=0;updateStats();return;
+      }
     }
 
     if(isRunning&&currentTP>0){
@@ -476,6 +505,7 @@ async function scanLoop(){
   const pat=candles.slice(-7,-1).map(c=>c.bull?'🟢':'🔴').join('');
   const analysis=analyzeMarket(candles);
   const ob=detectOB(candles,analysis);
+  lastAnalysis=analysis; // Für Trend-Umkehr Detection
   updateDecision(analysis,ob);
   if(ob){
     const score=analysis?.total||0;
