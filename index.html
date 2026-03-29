@@ -370,7 +370,8 @@ let activeTrades = [];
 let tradeHistory = [];
 let stats        = { wins: 0, losses: 0, totalPnl: 0, obCount: 0 };
 let lastOBCheck  = 0;
-let lastOBTimestamp = 0;
+let tradedOBKeys = new Set(); // Alle bereits getradeten OBs merken
+let botStartTime = 0;          // Wann wurde der Bot gestartet?
 let lastPnlDisplay  = 0;
 
 // ═══════════════════════════════════════════════════════
@@ -610,15 +611,22 @@ function detectOrderBlock(candles) {
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
       if (move >= 0.08) {
-        const key      = ob.ts + '_L';
-        if (lastOBTimestamp === key) continue;
+        const key = ob.ts + '_L';
+        // Skip wenn bereits getradet ODER wenn OB vor Bot-Start
+        if (tradedOBKeys.has(key)) continue;
+        if (ob.ts <= botStartTime) continue; // Verhindert sofortigen Trade!
 
         const entry    = b1.open;
         // Natürlicher TP = HIGH der OB Kerze (wo MM verkauft hat)
-        const tp_price = ob.high;
-        // Nur valid wenn TP über Entry liegt
-        if (tp_price <= entry) continue;
+        let tp_price = ob.high;
+        // SICHERHEIT: TP muss ÜBER Entry liegen!
+        if (tp_price <= entry) {
+          // Fallback: Entry + Ø OB Größe
+          tp_price = entry * 1.001; // mindestens 0.1% TP
+        }
         const tp_pct_real = (tp_price - entry) / entry * 100;
+        // Fee Check: TP muss Fees decken (min 0.12%)
+        if (tp_pct_real < 0.12) continue; // Skip wenn zu klein
 
         return {
           direction:   'LONG',
@@ -643,10 +651,14 @@ function detectOrderBlock(candles) {
 
         const entry    = b1.open;
         // Natürlicher TP = LOW der OB Kerze (wo MM gekauft hat)
-        const tp_price = ob.low;
-        // Nur valid wenn TP unter Entry liegt
-        if (tp_price >= entry) continue;
+        let tp_price = ob.low;
+        // SICHERHEIT: TP muss UNTER Entry liegen!
+        if (tp_price >= entry) {
+          tp_price = entry * 0.999; // mindestens 0.1% TP
+        }
         const tp_pct_real = (entry - tp_price) / entry * 100;
+        // Fee Check: TP muss Fees decken (min 0.12%)
+        if (tp_pct_real < 0.12) continue; // Skip wenn zu klein
 
         return {
           direction:   'SHORT',
@@ -945,7 +957,7 @@ async function scanLoop() {
 
   if (ob) {
     // ob_key bereits in detectOrderBlock geprüft – hier nochmal sicher
-    if (lastOBTimestamp === ob.ob_key) {
+    if (tradedOBKeys.has(ob.ob_key)) {
       document.getElementById('signalBadge').className   = 'signal-badge scan';
       document.getElementById('signalBadge').textContent = 'SCANNING...';
       return;
@@ -979,7 +991,7 @@ async function scanLoop() {
 
     const key = document.getElementById('apiKey').value.trim();
     if (key) {
-      lastOBTimestamp = ob.ob_key; // Merke diesen OB – nie wieder traden!
+      tradedOBKeys.add(ob.ob_key); // Merke diesen OB – nie wieder traden!
       await executeTrade(ob);
     } else {
       log('⚠️ API Keys fehlen!', 'warn');
