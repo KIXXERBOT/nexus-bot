@@ -272,32 +272,53 @@ function updateDecision(a,ob){
 function detectOB(candles,analysis){
   if(candles.length<6)return null;
   const len=candles.length,mult=parseFloat(document.getElementById('tpMult').value)||5;
-  for(let i=len-5;i>=Math.max(1,len-15);i--){
+
+  // Sammle ALLE OBs in den letzten 12 Kerzen
+  const foundOBs=[];
+  for(let i=len-5;i>=Math.max(1,len-14);i--){
     const ob=candles[i],b1=candles[i+1],b2=candles[i+2],b3=candles[i+3];
     if(!ob||!b1||!b2||!b3)continue;
-    if(i+3>=len-1)continue; // B3 darf nicht aktuelle laufende Kerze sein!
+    if(i+3>=len)continue; // B3 darf nicht aktuelle laufende Kerze sein
+
+    // LONG OB: Bearisch + 3× Bullisch
     if(!ob.bull&&b1.bull&&b2.bull&&b3.bull){
       const move=(b3.close-ob.low)/ob.low*100;
       if(move>=0.08){
-        const key=ob.ts+'_L';if(tradedOBs.has(key))continue;
-        const entry=b1.open,dist=Math.max(ob.high-entry,entry*0.0003);
-        const tp=entry+dist*mult;if(tp<=entry)continue;
+        const key=ob.ts+'_L';
+        if(tradedOBs.has(key))continue;
+        const entry=b1.open;
+        const dist=Math.max(ob.high-entry,entry*0.0003);
+        const tp=entry+dist*mult;
+        if(tp<=entry)continue;
         if(analysis&&analysis.rsi>78)continue;
-        return{dir:'LONG',entry,tp,ob_high:ob.high,ob_low:ob.low,move:move.toFixed(3),key};
+        foundOBs.push({dir:'LONG',entry,tp,move,key,idx:i});
       }
     }
+
+    // SHORT OB: Bullisch + 3× Bearisch
     if(ob.bull&&!b1.bull&&!b2.bull&&!b3.bull){
       const move=(ob.high-b3.close)/ob.high*100;
       if(move>=0.08){
-        const key=ob.ts+'_S';if(tradedOBs.has(key))continue;
-        const entry=b1.open,dist=Math.max(entry-ob.low,entry*0.0003);
-        const tp=entry-dist*mult;if(tp>=entry)continue;
+        const key=ob.ts+'_S';
+        if(tradedOBs.has(key))continue;
+        const entry=b1.open;
+        const dist=Math.max(entry-ob.low,entry*0.0003);
+        const tp=entry-dist*mult;
+        if(tp>=entry)continue;
         if(analysis&&analysis.rsi<22)continue;
-        return{dir:'SHORT',entry,tp,ob_high:ob.high,ob_low:ob.low,move:move.toFixed(3),key};
+        foundOBs.push({dir:'SHORT',entry,tp,move,key,idx:i});
       }
     }
   }
-  return null;
+
+  if(foundOBs.length===0)return null;
+
+  // Nehme den NEUESTEN OB (größter Index = aktuellster)
+  foundOBs.sort((a,b)=>b.idx-a.idx);
+  const best=foundOBs[0];
+  return{dir:best.dir,entry:best.entry,tp:best.tp,
+         ob_high:candles[best.idx].high,ob_low:candles[best.idx].low,
+         move:best.move.toFixed(3),key:best.key};
 }
 
 async function syncPosition(){
