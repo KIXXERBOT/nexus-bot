@@ -600,38 +600,37 @@ function detectOrderBlock(candles) {
   if (candles.length < 6) return null;
   const len = candles.length;
 
+  // Suche OB in letzten 12 abgeschlossenen Kerzen
+  // len-1 = aktuelle laufende Kerze → nicht verwenden
+  // len-2 = letzte abgeschlossene
   for (let i = len-5; i >= Math.max(1, len-16); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
     const b2 = candles[i+2];
     const b3 = candles[i+3];
     if (!ob || !b1 || !b2 || !b3) continue;
-    if (!ob.ts) continue;
+    if (!ob.ts || !ob.open) continue;
 
-    // ── LONG: Bear + 3× Bull ─────────────────────────
+    // ── LONG: Bearische Kerze + 3 Bullische ──────────
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
       if (move >= 0.08) {
-        const key = ob.ts + '_L';
-        // Skip wenn bereits getradet ODER wenn OB vor Bot-Start
+        const key   = ob.ts + '_L';
         if (tradedOBKeys.has(key)) continue;
 
         const entry    = b1.open;
-        // Natürlicher TP = HIGH der OB Kerze (wo MM verkauft hat)
-        let tp_price = ob.high;
-        // SICHERHEIT: TP muss ÜBER Entry liegen!
-        if (tp_price <= entry) {
-          // Fallback: Entry + Ø OB Größe
-          tp_price = entry * 1.001; // mindestens 0.1% TP
-        }
-        const tp_pct_real = (tp_price - entry) / entry * 100;
-        // Kein Mindest-TP – alle OBs werden getradet
+        const tp_price = ob.high; // TP = High der OB Kerze
+
+        // TP MUSS über Entry liegen!
+        if (tp_price <= entry) continue;
+
+        const tp_pct = (tp_price - entry) / entry * 100;
 
         return {
           direction:   'LONG',
           entry:       entry,
-          tp_price:    tp_price,       // OB High ← echter TP!
-          tp_pct:      tp_pct_real,    // Echter % (variabel)
+          tp_price:    tp_price,
+          tp_pct:      tp_pct,
           ob_low:      ob.low,
           ob_high:     ob.high,
           detected_at: new Date().toLocaleTimeString(),
@@ -641,28 +640,26 @@ function detectOrderBlock(candles) {
       }
     }
 
-    // ── SHORT: Bull + 3× Bear ────────────────────────
+    // ── SHORT: Bullische Kerze + 3 Bearische ─────────
     if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
       const move = (ob.high - b3.close) / ob.high * 100;
       if (move >= 0.08) {
-        const key      = ob.ts + '_S';
-        if (lastOBTimestamp === key) continue;
+        const key   = ob.ts + '_S';
+        if (tradedOBKeys.has(key)) continue;
 
         const entry    = b1.open;
-        // Natürlicher TP = LOW der OB Kerze (wo MM gekauft hat)
-        let tp_price = ob.low;
-        // SICHERHEIT: TP muss UNTER Entry liegen!
-        if (tp_price >= entry) {
-          tp_price = entry * 0.999; // mindestens 0.1% TP
-        }
-        const tp_pct_real = (entry - tp_price) / entry * 100;
-        // Kein Mindest-TP – alle OBs werden getradet
+        const tp_price = ob.low; // TP = Low der OB Kerze
+
+        // TP MUSS unter Entry liegen!
+        if (tp_price >= entry) continue;
+
+        const tp_pct = (entry - tp_price) / entry * 100;
 
         return {
           direction:   'SHORT',
           entry:       entry,
-          tp_price:    tp_price,       // OB Low ← echter TP!
-          tp_pct:      tp_pct_real,    // Echter % (variabel)
+          tp_price:    tp_price,
+          tp_pct:      tp_pct,
           ob_low:      ob.low,
           ob_high:     ob.high,
           detected_at: new Date().toLocaleTimeString(),
@@ -740,14 +737,40 @@ async function executeTrade(ob) {
     return;
   }
 
+  // Warte kurz damit Bybit die Order füllt
+  await new Promise(r => setTimeout(r, 1500));
+
+  // Hole echten Entry-Preis von Bybit!
+  let realEntry = ob.entry; // Fallback
+  let realQty   = parseFloat(qty);
+  let realSL    = 0;
+  let realTP    = 0;
+
+  const posData = await bybitGet('/v5/position/list', {category:'linear', symbol:SYMBOL});
+  if (posData?.list) {
+    const pos = posData.list.find(p => parseFloat(p.size) > 0);
+    if (pos) {
+      realEntry = parseFloat(pos.avgPrice);  // Echter Fill-Preis!
+      realQty   = parseFloat(pos.size);
+      // SL und TP vom echten Entry berechnen
+      const sl_pct2 = parseFloat(document.getElementById('slPct').value) / 100;
+      realSL = direction === 'LONG'
+        ? realEntry * (1 - sl_pct2)
+        : realEntry * (1 + sl_pct2);
+      // TP bleibt OB-basiert (nicht vom Entry!)
+      realTP = tp_price;
+      log(`✅ Bybit Fill: Entry=$${realEntry.toFixed(2)} | TP=$${realTP.toFixed(2)} | SL=$${realSL.toFixed(2)}`, 'ok');
+    }
+  }
+
   const trade = {
     id:        result.orderId,
     direction: direction,
-    entry:     ob.entry,
-    tp:        tp_price,   // OB-basierter TP!
-    sl:        sl_price,   // Entry-basierter SL
-    qty:       parseFloat(qty),
-    notional:  notional,
+    entry:     realEntry,   // ECHTER Bybit Entry!
+    tp:        realTP,      // OB-basierter TP
+    sl:        realSL,      // SL vom echten Entry
+    qty:       realQty,
+    notional:  realEntry * realQty,
     margin:    margin,
     leverage:  leverage,
     ob_low:    ob.ob_low,
@@ -1245,6 +1268,38 @@ async function toggleBot() {
   log(`🚀 NEXUS v7 gestartet | Modus: ${mode.toUpperCase()}`, 'ok');
   log(`📡 Marktdaten: LIVE Bybit (echter BTC Kurs)`, 'ok');
   log('✅ Orders: LIVE Bybit (Echtgeld)', 'ok');
+
+  // Beim Start: Alle AKTUELL sichtbaren OBs merken
+  // damit nur NEUE OBs nach dem Start getradet werden!
+  const initCandles = await getCandles();
+  if (initCandles && initCandles.length >= 5) {
+    const len = initCandles.length;
+    let blocked = 0;
+    for (let i = len-5; i >= Math.max(1, len-16); i--) {
+      const ob = initCandles[i];
+      const b1 = initCandles[i+1];
+      const b2 = initCandles[i+2];
+      const b3 = initCandles[i+3];
+      if (!ob || !b1 || !b2 || !b3 || !ob.ts) continue;
+      // LONG OB
+      if (!ob.bull && b1.bull && b2.bull && b3.bull) {
+        const move = (b3.close - ob.low) / ob.low * 100;
+        if (move >= 0.08 && ob.high > b1.open) {
+          tradedOBKeys.add(ob.ts + '_L');
+          blocked++;
+        }
+      }
+      // SHORT OB
+      if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
+        const move = (ob.high - b3.close) / ob.high * 100;
+        if (move >= 0.08 && ob.low < b1.open) {
+          tradedOBKeys.add(ob.ts + '_S');
+          blocked++;
+        }
+      }
+    }
+    log(`🔒 ${blocked} bestehende OBs gesperrt – warte auf NEUE Signale!`, 'warn');
+  }
 
   // Balance laden
   await updateBalance();
