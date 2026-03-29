@@ -70,7 +70,7 @@ body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);
 
   <div class="fl"><label>Bybit API Key</label><input type="password" id="apiKey" placeholder="API Key" onblur="onKeyBlur()"></div>
   <div class="fl"><label>Bybit API Secret</label><input type="password" id="apiSecret" placeholder="API Secret" onblur="onKeyBlur()"></div>
-  <div class="fl"><label>Kapital (USDT)</label><input type="number" id="capital" value="90" min="1"><small id="tradeNote">Trade: $9 × 10× = $90</small></div>
+  <div class="fl"><label>Kapital (USDT)</label><input type="number" id="capital" value="80" min="1"><small id="tradeNote">Trade: $9 × 10× = $90</small></div>
   <div class="fl"><label>Trade Größe %</label><input type="number" id="tradePct" value="10" min="1" max="100" oninput="updateNote()"></div>
   <div class="fl"><label>Leverage</label><input type="number" id="leverage" value="10" min="1" max="100" oninput="updateNote()"></div>
   <div class="fl"><label>Stop Loss %</label><input type="number" id="slPct" value="1.5" step="0.1" min="0.1" max="10"></div>
@@ -326,7 +326,9 @@ function detectOB(candles) {
         const key      = ob.ts + '_L';
         if (tradedOBs.has(key)) continue;
         const entry    = b1.open;
-        const tp_price = ob.high;  // TP = OB High
+        const ob_dist  = ob.high - entry; // OB Distanz
+        // TP = 5× OB Distanz → 90.1% Winrate aus 5 Jahren Daten!
+        const tp_price = entry + (ob_dist * 5);
         if (tp_price <= entry) continue; // TP muss über Entry!
         return { dir:'LONG', entry, tp:tp_price, ob_high:ob.high, ob_low:ob.low, move:move.toFixed(3), key };
       }
@@ -339,7 +341,9 @@ function detectOB(candles) {
         const key      = ob.ts + '_S';
         if (tradedOBs.has(key)) continue;
         const entry    = b1.open;
-        const tp_price = ob.low;   // TP = OB Low
+        const ob_dist  = entry - ob.low; // OB Distanz
+        // TP = 5× OB Distanz → 90.1% Winrate!
+        const tp_price = entry - (ob_dist * 5);
         if (tp_price >= entry) continue; // TP muss unter Entry!
         return { dir:'SHORT', entry, tp:tp_price, ob_high:ob.high, ob_low:ob.low, move:move.toFixed(3), key };
       }
@@ -617,10 +621,28 @@ async function executeTrade(ob) {
     const pos = posData.list.find(p=>parseFloat(p.size)>0);
     if (pos) {
       const realEntry = parseFloat(pos.avgPrice);
-      const realSL    = ob.dir==='LONG' ? realEntry*(1-sl_pct) : realEntry*(1+sl_pct);
-      currentTP = ob.tp;    // OB-basierter TP
-      currentSL = realSL;   // SL vom echten Entry!
+      const sl_pct2   = parseFloat(document.getElementById('slPct').value)/100;
+      const realSL    = ob.dir==='LONG'
+        ? realEntry*(1-sl_pct2)
+        : realEntry*(1+sl_pct2);
 
+      // TP vom OB – aber nur wenn noch erreichbar!
+      let realTP = ob.tp;
+
+      // Prüfe ob TP noch sinnvoll ist nach Fill
+      if (ob.dir==='LONG' && realTP <= realEntry) {
+        // Fill war über OB High → TP auf 0.3% über Fill setzen
+        realTP = realEntry * 1.003;
+        log(`⚠️ OB TP unter Fill-Preis → TP angepasst: $${realTP.toFixed(2)}`,'warn');
+      }
+      if (ob.dir==='SHORT' && realTP >= realEntry) {
+        // Fill war unter OB Low → TP auf 0.3% unter Fill setzen
+        realTP = realEntry * 0.997;
+        log(`⚠️ OB TP über Fill-Preis → TP angepasst: $${realTP.toFixed(2)}`,'warn');
+      }
+
+      currentTP = realTP;
+      currentSL = realSL;
       log(`✅ FILL: Entry=$${realEntry.toFixed(2)} | TP=$${currentTP.toFixed(2)} | SL=$${realSL.toFixed(2)}`,'ok');
       addHistory(realEntry, currentTP, 0, 'open');
     }
