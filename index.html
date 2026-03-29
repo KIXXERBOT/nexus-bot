@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -615,7 +616,6 @@ function detectOrderBlock(candles) {
         const key = ob.ts + '_L';
         // Skip wenn bereits getradet ODER wenn OB vor Bot-Start
         if (tradedOBKeys.has(key)) continue;
-        if (ob.ts <= botStartTime) continue; // Verhindert sofortigen Trade!
 
         const entry    = b1.open;
         // Natürlicher TP = HIGH der OB Kerze (wo MM verkauft hat)
