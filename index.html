@@ -359,8 +359,27 @@ async function syncPosition(){
     document.getElementById('posWrap').style.display='none';
     if(currentTP!==0){currentTP=0;currentSL=0;}
   }
-  const bal=await bGet('/v5/account/wallet-balance',{accountType:'UNIFIED'});
-  if(bal?.list){try{const u=bal.list[0].coin.find(c=>c.coin==='USDT');if(u){document.getElementById('balance').textContent='$'+parseFloat(u.equity||u.walletBalance).toFixed(2);document.getElementById('balance').style.color='var(--gold)';}}catch(e){}}
+  // Balance von Bybit holen - versuche UNIFIED und CONTRACT
+  try {
+    const bal=await bGet('/v5/account/wallet-balance',{accountType:'UNIFIED'});
+    if(bal?.list&&bal.list.length>0) {
+      const coins=bal.list[0].coin||[];
+      const u=coins.find(c=>c.coin==='USDT');
+      if(u) {
+        const eq=parseFloat(u.equity||u.walletBalance||u.availableToWithdraw||0);
+        if(eq>0){document.getElementById('balance').textContent='$'+eq.toFixed(2);document.getElementById('balance').style.color='var(--gold)';return;}
+      }
+      // Wenn coin leer - zeige totalEquity
+      const total=parseFloat(bal.list[0].totalEquity||0);
+      if(total>0){document.getElementById('balance').textContent='$'+total.toFixed(2);document.getElementById('balance').style.color='var(--gold)';return;}
+    }
+    // Fallback: CONTRACT wallet
+    const bal2=await bGet('/v5/account/wallet-balance',{accountType:'CONTRACT'});
+    if(bal2?.list&&bal2.list.length>0){
+      const u2=bal2.list[0].coin?.find(c=>c.coin==='USDT');
+      if(u2){document.getElementById('balance').textContent='$'+parseFloat(u2.walletBalance||0).toFixed(2);document.getElementById('balance').style.color='var(--gold)';}
+    }
+  } catch(e){log('Balance Fehler: '+e.message,'err');}
   const today=new Date();today.setHours(0,0,0,0);
   const pR=await bGet('/v5/position/closed-pnl',{category:'linear',symbol:SYMBOL,startTime:today.getTime().toString(),limit:'50'});
   if(pR?.list){let tot=0,w=0,l=0;pR.list.forEach(p=>{const v=parseFloat(p.closedPnl||0);tot+=v;if(v>0)w++;else if(v<0)l++;});
@@ -473,16 +492,9 @@ async function toggleBot(){
   log('🧠 Score-System: OB + EMA Trend + RSI + Handelszeit + Volatilität','ok');
   log('📊 TP: '+document.getElementById('tpMult').value+'× OB Distanz | WR Ziel: 90%+','ok');
   const initC=await getCandles('1',25);
-  if(initC.length>=5){
-    let blocked=0;const len=initC.length;
-    for(let i=len-5;i>=Math.max(1,len-15);i--){
-      const ob=initC[i],b1=initC[i+1],b2=initC[i+2],b3=initC[i+3];
-      if(!ob||!b1||!b2||!b3||i+3>=len)continue;
-      if(!ob.bull&&b1.bull&&b2.bull&&b3.bull){const m=(b3.close-ob.low)/ob.low*100;if(m>=0.08){tradedOBs.add(ob.ts+'_L');blocked++;}}
-      if(ob.bull&&!b1.bull&&!b2.bull&&!b3.bull){const m=(ob.high-b3.close)/ob.high*100;if(m>=0.08){tradedOBs.add(ob.ts+'_S');blocked++;}}
-    }
-    if(blocked>0)log('🔒 '+blocked+' bestehende OBs gesperrt – nur NEUE werden getradet!','warn');
-  }
+  // KEINE OBs sperren beim Start!
+  // Der Bot soll sofort den ersten OB traden wenn er gut ist
+  log('✅ Bot bereit – scanne sofort nach Order Blocks!','ok');
   await syncPosition();await scanLoop();
   scanTimer=setInterval(scanLoop,SCAN_MS);
 }
