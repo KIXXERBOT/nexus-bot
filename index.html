@@ -370,8 +370,9 @@ let activeTrades = [];
 let tradeHistory = [];
 let stats        = { wins: 0, losses: 0, totalPnl: 0, obCount: 0 };
 let lastOBCheck  = 0;
-let tradedOBKeys = new Set(); // Alle bereits getradeten OBs merken
-let botStartTime = 0;          // Wann wurde der Bot gestartet?
+let tradedOBKeys  = new Set(); // Alle bereits getradeten OBs merken
+let botStartTime  = 0;         // Wann wurde der Bot gestartet?
+let lastOBTimestamp = 0;       // Kompatibilität
 let lastPnlDisplay  = 0;
 
 // ═══════════════════════════════════════════════════════
@@ -427,11 +428,11 @@ function updateTradeNote() {
   const capital  = parseFloat(document.getElementById('capital').value) || 0;
   const tradePct = parseFloat(document.getElementById('tradePct').value) || 10;
   const leverage = parseInt(document.getElementById('leverage').value) || 10;
-  const tpPct    = parseFloat(document.getElementById('tpPct').value) || 0.3;
+  const tpPct    = 0.3; // TP wird automatisch vom OB berechnet
 
   const margin   = capital * tradePct / 100;
   const notional = margin * leverage;
-  const tpUsd    = notional * tpPct / 100;
+  const tpUsd    = 0; // TP auto vom OB
   const slUsd    = notional * (parseFloat(document.getElementById('slPct').value)||1.5) / 100;
 
   document.getElementById('tradePctNote').textContent =
@@ -824,7 +825,7 @@ async function updateLivePrice() {
     atDiv.innerHTML = activeTrades.map(t => {
       const pnl = (price - t.entry) / t.entry * t.notional;
       const pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const tp_pct = parseFloat(document.getElementById('tpPct').value)/100;
+      const tp_pct = pos ? (Math.abs(parseFloat(pos.avgPrice) - parseFloat(pos.markPrice))/parseFloat(pos.avgPrice)) || 0.003 : 0.003;
       const progress = Math.max(0,Math.min(100,(price-t.entry)/t.entry/tp_pct*100));
       return `<div style="background:var(--bg);border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:11px">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -846,7 +847,7 @@ async function updateLivePrice() {
 // nie mehr als 0.8% gegen uns → 1.5% stört den Trade NICHT)
 // ═══════════════════════════════════════════════════════
 async function monitorTrade(trade) {
-  const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
+  // TP wird automatisch vom OB berechnet - kein fixes tpPct mehr
 
   // SL aus Dashboard (einstellbar vom User)
   const SL_PCT   = parseFloat(document.getElementById('slPct').value) / 100;
@@ -1097,7 +1098,7 @@ async function syncBybitPositions() {
     const liqPrice  = parseFloat(pos.liqPrice);
     const side      = pos.side;
     const notional  = entry * size;
-    const tp_pct    = parseFloat(document.getElementById('tpPct').value)/100;
+    const tp_pct    = trade.tp_pct || ((Math.abs(trade.tp - trade.entry)/trade.entry)) || 0.003;
     const sl_pct    = parseFloat(document.getElementById('slPct').value)/100;
     const tp_price  = side==='Buy' ? entry*(1+tp_pct) : entry*(1-tp_pct);
     const sl_price  = side==='Buy' ? entry*(1-sl_pct) : entry*(1+sl_pct);
