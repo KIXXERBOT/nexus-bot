@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -626,8 +625,7 @@ function detectOrderBlock(candles) {
           tp_price = entry * 1.001; // mindestens 0.1% TP
         }
         const tp_pct_real = (tp_price - entry) / entry * 100;
-        // Fee Check: TP muss Fees decken (min 0.12%)
-        if (tp_pct_real < 0.12) continue; // Skip wenn zu klein
+        // Kein Mindest-TP – alle OBs werden getradet
 
         return {
           direction:   'LONG',
@@ -658,8 +656,7 @@ function detectOrderBlock(candles) {
           tp_price = entry * 0.999; // mindestens 0.1% TP
         }
         const tp_pct_real = (entry - tp_price) / entry * 100;
-        // Fee Check: TP muss Fees decken (min 0.12%)
-        if (tp_pct_real < 0.12) continue; // Skip wenn zu klein
+        // Kein Mindest-TP – alle OBs werden getradet
 
         return {
           direction:   'SHORT',
