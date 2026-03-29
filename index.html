@@ -156,14 +156,13 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
     <input type="number" id="leverage" class="field-input" value="20" min="5" max="50">
   </div>
   <div class="field-group">
-    <div class="field-label">Take Profit %</div>
-    <input type="number" id="tpPct" class="field-input" value="0.3" step="0.1" min="0.1">
-    <div class="field-note">0.3% empfohlen (86.9% Trefferrate)</div>
-  </div>
-  <div class="field-group">
     <div class="field-label">Stop Loss %</div>
     <input type="number" id="slPct" class="field-input" value="1.5" step="0.1" min="0.5" max="10">
     <div class="field-note">1.5% empfohlen (stört Trade nicht)</div>
+  </div>
+  <div style="background:var(--bg3);border-radius:4px;padding:8px 10px;font-size:10px;color:var(--gold)">
+    ⚡ TP wird automatisch vom Order Block berechnet!<br>
+    <span style="color:var(--muted)">LONG: TP = High der OB Kerze<br>SHORT: TP = Low der OB Kerze</span>
   </div>
   <div class="field-group">
     <div class="field-label">Max gleichzeitige Trades</div>
@@ -200,13 +199,12 @@ body { font-family: 'Courier New', monospace; background: var(--bg); color: var(
 
   <div class="strategy-info">
     <b>Order Block Strategie</b>
-    📈 LONG: 🔴 + 🟢🟢🟢 = 94.0%<br>
-    📉 SHORT: 🟢 + 🔴🔴🔴 = 94.3%<br>
-    📥 Entry sofort<br>
-    🎯 TP +0.3%<br>
-    🛑 SL -1.5% (einstellbar)<br>
-    📊 ~96 Trades/Tag<br>
-    ⏱️ Ø 40 Min bis TP
+    📈 LONG: 🔴 + 🟢🟢🟢 = 99.8%<br>
+    📉 SHORT: 🟢 + 🔴🔴🔴 = 99.8%<br>
+    📥 Entry: Open[+1]<br>
+    🎯 TP: OB High/Low (auto)<br>
+    🛑 SL: -1.5% vom Entry<br>
+    ⏱️ Ø 46 Min bis TP
   </div>
 </div>
 
@@ -599,7 +597,6 @@ async function bybitGet(endpoint, params) {
 function detectOrderBlock(candles) {
   if (candles.length < 6) return null;
   const len = candles.length;
-  const tp_pct = parseFloat(document.getElementById('tpPct').value) / 100;
 
   for (let i = len-6; i >= Math.max(1, len-14); i--) {
     const ob = candles[i];
@@ -613,19 +610,21 @@ function detectOrderBlock(candles) {
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
       const move = (b3.close - ob.low) / ob.low * 100;
       if (move >= 0.08) {
-        const key = ob.ts + '_L';
+        const key      = ob.ts + '_L';
         if (lastOBTimestamp === key) continue;
 
-        // TP vom OB Low berechnen (nicht vom Entry!)
-        // OB Low = wo der MM gekauft hat
-        // TP = OB Low + TP% = echter Zielpreis
-        const tp_price = ob.low * (1 + tp_pct);
+        const entry    = b1.open;
+        // Natürlicher TP = HIGH der OB Kerze (wo MM verkauft hat)
+        const tp_price = ob.high;
+        // Nur valid wenn TP über Entry liegt
+        if (tp_price <= entry) continue;
+        const tp_pct_real = (tp_price - entry) / entry * 100;
 
         return {
           direction:   'LONG',
-          entry:       b1.open,
-          tp_price:    tp_price,   // ← Exakter TP vom OB!
-          tp_pct:      tp_pct,
+          entry:       entry,
+          tp_price:    tp_price,       // OB High ← echter TP!
+          tp_pct:      tp_pct_real,    // Echter % (variabel)
           ob_low:      ob.low,
           ob_high:     ob.high,
           detected_at: new Date().toLocaleTimeString(),
@@ -639,17 +638,21 @@ function detectOrderBlock(candles) {
     if (ob.bull && !b1.bull && !b2.bull && !b3.bull) {
       const move = (ob.high - b3.close) / ob.high * 100;
       if (move >= 0.08) {
-        const key = ob.ts + '_S';
+        const key      = ob.ts + '_S';
         if (lastOBTimestamp === key) continue;
 
-        // TP vom OB High berechnen (nicht vom Entry!)
-        const tp_price = ob.high * (1 - tp_pct);
+        const entry    = b1.open;
+        // Natürlicher TP = LOW der OB Kerze (wo MM gekauft hat)
+        const tp_price = ob.low;
+        // Nur valid wenn TP unter Entry liegt
+        if (tp_price >= entry) continue;
+        const tp_pct_real = (entry - tp_price) / entry * 100;
 
         return {
           direction:   'SHORT',
-          entry:       b1.open,
-          tp_price:    tp_price,   // ← Exakter TP vom OB!
-          tp_pct:      tp_pct,
+          entry:       entry,
+          tp_price:    tp_price,       // OB Low ← echter TP!
+          tp_pct:      tp_pct_real,    // Echter % (variabel)
           ob_low:      ob.low,
           ob_high:     ob.high,
           detected_at: new Date().toLocaleTimeString(),
@@ -701,8 +704,8 @@ async function executeTrade(ob) {
     : ob.entry * (1 - ob.tp_pct);
   const diff = Math.abs(tp_price - entry_tp).toFixed(2);
 
-  log(`💰 ${direction} | Entry: $${ob.entry.toFixed(2)} | OB-TP: $${tp_price.toFixed(2)} | SL: $${sl_price.toFixed(2)}`, 'ok');
-  log(`📊 OB-Basis: $${(direction==='LONG'?ob.ob_low:ob.ob_high).toFixed(2)} | Move: +${ob.move_pct}% | TP Offset: $${diff}`, 'ok');
+  log(`💰 ${direction} | Entry: $${ob.entry.toFixed(2)} | OB-TP: $${tp_price.toFixed(2)} (+${ob.tp_pct.toFixed(3)}%) | SL: $${sl_price.toFixed(2)}`, 'ok');
+  log(`📊 OB Kerze: Low=$${ob.ob_low.toFixed(2)} High=$${ob.ob_high.toFixed(2)} | Move: +${ob.move_pct}%`, 'ok');
 
   // Leverage setzen
   await bybitPost('/v5/position/set-leverage', {
