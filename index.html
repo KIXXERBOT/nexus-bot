@@ -274,7 +274,8 @@ function detectOB(candles,analysis){
   const len=candles.length,mult=parseFloat(document.getElementById('tpMult').value)||5;
   for(let i=len-5;i>=Math.max(1,len-15);i--){
     const ob=candles[i],b1=candles[i+1],b2=candles[i+2],b3=candles[i+3];
-    if(!ob||!b1||!b2||!b3||i+3>=len)continue;
+    if(!ob||!b1||!b2||!b3)continue;
+    if(i+3>=len-1)continue; // B3 darf nicht aktuelle laufende Kerze sein!
     if(!ob.bull&&b1.bull&&b2.bull&&b3.bull){
       const move=(b3.close-ob.low)/ob.low*100;
       if(move>=0.08){
