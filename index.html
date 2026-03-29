@@ -317,7 +317,7 @@ function detectOB(candles) {
     const b2 = candles[i+2];
     const b3 = candles[i+3];
     if (!ob||!b1||!b2||!b3) continue;
-    if (i+3 >= len-1) continue; // B3 muss abgeschlossen sein
+    if (i+3 >= len) continue; // B3 darf nicht die aktuelle laufende sein
 
     // LONG: Bearische + 3 Bullische
     if (!ob.bull && b1.bull && b2.bull && b3.bull) {
