@@ -339,6 +339,14 @@ async function syncPosition(){
     document.getElementById('progFill').style.background=unPnl>=0?'var(--green)':'var(--red)';
     document.getElementById('progL').textContent='Entry $'+entry.toFixed(0);
     document.getElementById('progR').textContent='TP $'+tp.toFixed(0);
+    // Auto-Close nach 2 Stunden (Schutz vor endlosen Verlusttrades)
+    if(isRunning&&openTime>0&&(Date.now()-openTime)>120*60*1000){
+      log('⏰ Trade >2h offen – automatisch schließen!','err');
+      await closePos(size.toString(),side);
+      stats.losses++;addHistory(entry,tp,unPnl,'loss');
+      currentTP=0;currentSL=0;openTime=0;updateStats();return;
+    }
+
     if(isRunning&&currentTP>0){
       if((side==='Buy'&&mark>=currentTP)||(side==='Sell'&&mark<=currentTP)){
         log('🎯 TP ERREICHT! $'+mark.toFixed(2)+' | PnL: +$'+unPnl.toFixed(4),'ok');
@@ -347,6 +355,7 @@ async function syncPosition(){
         currentTP=0;currentSL=0;updateStats();
       }
     }
+    // SL immer prüfen – auch nach Reload!
     if(isRunning&&sl>0){
       if((side==='Buy'&&mark<=sl)||(side==='Sell'&&mark>=sl)){
         log('🛑 SL! $'+mark.toFixed(2)+' | PnL: $'+unPnl.toFixed(4),'err');
