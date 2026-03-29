@@ -600,7 +600,7 @@ function detectOrderBlock(candles) {
   if (candles.length < 6) return null;
   const len = candles.length;
 
-  for (let i = len-6; i >= Math.max(1, len-14); i--) {
+  for (let i = len-5; i >= Math.max(1, len-16); i--) {
     const ob = candles[i];
     const b1 = candles[i+1];
     const b2 = candles[i+2];
@@ -950,7 +950,7 @@ async function scanLoop() {
   document.getElementById('candleTime').textContent = new Date().toLocaleTimeString();
 
   // Debug: Zeige aktuelles Kerzenmuster
-  const pattern = candles.slice(-6,-1).map(c => c.bull ? '🟢' : '🔴').join('');
+  const pattern = candles.slice(-7,-1).map(c => c.bull ? '🟢' : '🔴').join('');
   log(`📊 Muster: ${pattern} | BTC: $${price.toFixed(0)}`, 'info');
 
   // Order Block erkennen
