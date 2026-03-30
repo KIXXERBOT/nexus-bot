@@ -212,8 +212,12 @@ function calcAllIndicators(candles){
   const candleScore=bullC>=4?80:bullC>=3?40:bearC>=4?-80:bearC>=3?-40:0;
   const avgVol=vols.slice(-10).reduce((a,b)=>a+b,0)/10,lastVol=vols[vols.length-2],volRatio=lastVol/avgVol;
   const volScore=volRatio>1.5?60:volRatio>1.2?30:volRatio<0.5?-20:10;
-  const weights={ema:0.2,rsi:0.15,macd:0.15,bb:0.1,stoch:0.1,candle:0.15,time:0.05,vol:0.05,atr:0.05};
-  const total=Math.round(emaScore*weights.ema+rsiScore*weights.rsi+macdScore*weights.macd+bbScore*weights.bb+stochScore*weights.stoch+candleScore*weights.candle+(timeScore-40)*weights.time+volScore*weights.vol);
+  // Score: Durchschnitt statt gewichtete Summe → realistisch 20-80
+  const allScores=[emaScore,rsiScore,macdScore,bbScore,stochScore,candleScore];
+  const validScores=allScores.filter(s=>s!==0);
+  const baseScore=validScores.length>0?Math.round(validScores.reduce((a,b)=>a+b,0)/validScores.length):0;
+  const timeBonus=timeScore>=80?15:timeScore>=50?8:0;
+  const total=Math.max(-100,Math.min(100,baseScore+timeBonus));
   return{total:Math.max(-100,Math.min(100,total)),
     ema:{val:e9.toFixed(1)+'/'+e21.toFixed(1),score:emaScore,bull:emaBull,sig:emaBull?'▲ BULLISH':'▼ BEARISH'},
     rsi:{val:rsi.toFixed(1),score:rsiScore,bull:rsi<50,sig:rsi<30?'OVERSOLD':rsi>70?'OVERBOUGHT':rsi<50?'BULLISH':'BEARISH'},
