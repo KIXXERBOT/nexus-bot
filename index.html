@@ -227,14 +227,6 @@ body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);
     <iframe id="tvChart" src="https://s.tradingview.com/widgetembed/?frameElementId=tv1&symbol=BYBIT%3ABTCUSDT.P&interval=1&theme=dark&style=1&locale=de_DE&toolbar_bg=%230f0f1e&hide_side_toolbar=0&allow_symbol_change=0&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FBollingerBandsR%40tv-basicstudies%1FStoch%40tv-basicstudies" style="width:100%;height:400px;border:none" allowtransparency="true" scrolling="no"></iframe>
   </div>
 
-  <!-- FVG Panel -->
-  <div class="panel">
-    <div class="ptitle"><span>🕳️ Fair Value Gaps (FVG) · Wahrscheinlichkeit der Füllung</span></div>
-    <div id="fvgBox">
-      <div style="font-size:11px;color:var(--muted)">Analysiere FVGs...</div>
-    </div>
-  </div>
-
   <!-- History -->
   <div class="panel">
     <div class="ptitle">Trade Historie</div>
@@ -281,8 +273,7 @@ function calc(){
   const cap=parseFloat(document.getElementById('capital').value)||85;
   const lev=parseInt(document.getElementById('maxLev').value)||10;
   const tpPct=parseFloat(document.getElementById('tpPct').value)||0.18;
-  const usable=cap*0.90;
-  document.getElementById('capInfo').textContent=`= $${(usable*0.37).toFixed(0)}/$${(usable*0.33).toFixed(0)}/$${(usable*0.30).toFixed(0)} pro Zone`;
+  document.getElementById('capInfo').textContent=`= $${(cap*0.4).toFixed(0)}/$${(cap*0.3).toFixed(0)}/$${(cap*0.3).toFixed(0)} Zonen`;
   document.getElementById('levInfo').textContent=`= $${(cap*lev).toFixed(0)} max Notional`;
   const wr=tpPct<=0.1?99:tpPct<=0.18?97:tpPct<=0.25?95:tpPct<=0.35?92:90;
   document.getElementById('tpInfo').textContent=`~${wr}% Winrate | Fee: ${(FEE_PCT*100).toFixed(2)}%`;
@@ -385,41 +376,22 @@ function calcAllIndicators(candles){
   const obScore=0; // wird von detectAllOBs gesetzt
 
   // Gesamt-Score (-100 bis +100)
-  // KEIN Gewichtungs-Multiplikator – direkt addieren und Durchschnitt
-  const scores=[emaScore, rsiScore, macdScore, bbScore, stochScore, candleScore];
-  const validScores=scores.filter(s=>s!==0);
-  const total=validScores.length>0?
-    Math.round(validScores.reduce((a,b)=>a+b,0)/validScores.length):0;
-  // Zeitbonus addieren
-  const timeBonus=timeScore>=80?15:timeScore>=50?8:timeScore>=30?3:0;
-
-  // FVG Detection
-  const fvgs=[];
-  for(let i=1;i<candles.length-2;i++){
-    const prev=candles[i-1],curr=candles[i],next=candles[i+1];
-    // Bullish FVG: Low von next > High von prev (Lücke nach oben)
-    if(next.low>prev.high){
-      const gap=next.low-prev.high;
-      const gapPct=gap/prev.high*100;
-      if(gapPct>0.03){
-        fvgs.push({type:'BULL',high:next.low,low:prev.high,size:gap,pct:gapPct,idx:i,ts:curr.ts});
-      }
-    }
-    // Bearish FVG: High von next < Low von prev (Lücke nach unten)
-    if(next.high<prev.low){
-      const gap=prev.low-next.high;
-      const gapPct=gap/prev.low*100;
-      if(gapPct>0.03){
-        fvgs.push({type:'BEAR',high:prev.low,low:next.high,size:gap,pct:gapPct,idx:i,ts:curr.ts});
-      }
-    }
-  }
+  const weights={ema:0.2,rsi:0.15,macd:0.15,bb:0.1,stoch:0.1,candle:0.15,time:0.05,vol:0.05,atr:0.05};
+  const total=Math.round(
+    emaScore*weights.ema +
+    rsiScore*weights.rsi +
+    macdScore*weights.macd +
+    bbScore*weights.bb +
+    stochScore*weights.stoch +
+    candleScore*weights.candle +
+    (timeScore-40)*weights.time +
+    volScore*weights.vol
+  );
 
   return{
-    total:Math.max(-100,Math.min(100,total+timeBonus)),
-    fvgs,
+    total:Math.max(-100,Math.min(100,total)),
     ema:{val:e9.toFixed(1)+'/'+e21.toFixed(1),score:emaScore,bull:emaBull,sig:emaBull?'▲ BULLISH':'▼ BEARISH'},
-    rsi:{val:rsi.toFixed(1),num:rsi,score:rsiScore,bull:rsi<50,sig:rsi<30?'OVERSOLD →LONG':rsi>70?'OVERBOUGHT →SHORT':rsi<50?'BULLISH':'BEARISH'},
+    rsi:{val:rsi.toFixed(1),score:rsiScore,bull:rsi<50,sig:rsi<30?'OVERSOLD':rsi>70?'OVERBOUGHT':rsi<50?'BULLISH':'BEARISH'},
     macd:{val:macdLine.toFixed(2),score:macdScore,bull:macdBull,sig:macdBull?'▲ BULLISH':'▼ BEARISH'},
     bb:{val:bbPos.toFixed(0)+'%',score:bbScore,bull:bbPos<50,sig:bbPos<20?'OVERSOLD':bbPos>80?'OVERBOUGHT':bbPos<50?'MITTE-UNTEN':'MITTE-OBEN'},
     stoch:{val:stochK.toFixed(1),score:stochScore,bull:stochK<50,sig:stochK<20?'OVERSOLD':stochK>80?'OVERBOUGHT':stochK<50?'BULLISH':'BEARISH'},
@@ -456,49 +428,31 @@ function updateIndicatorUI(a, ob){
   }
   scoreEl.textContent=(score>0?'+':'')+score;
 
-  // Indikator Balken Funktion – Score -100 bis +100
-  function setInd(id, val, score, sig, bull){
+  // Indikator Balken Funktion
+  function setInd(id,val,score,sig,bull){
     const v=document.getElementById(id+'Val');
     const b=document.getElementById(id+'Bar');
     const s=document.getElementById(id+'Sig');
-    const sc=parseFloat(score)||0;
-    const pct=Math.min(100,Math.abs(sc)); // 0-100%
-    const col=sc>0?'var(--green)':sc<0?'var(--red)':'var(--muted)';
-    if(v){v.textContent=val;v.style.color=(bull===true)?'var(--green)':(bull===false)?'var(--red)':'var(--text)';}
-    if(b){b.style.width=pct+'%';b.style.background=col;}
-    if(s){s.textContent=sig;s.style.color=col;}
+    if(v)v.textContent=val;
+    if(b){
+      const pct=Math.abs(score||0);
+      b.style.width=pct+'%';
+      b.style.background=(score||0)>0?'var(--green)':(score||0)<0?'var(--red)':'var(--muted)';
+    }
+    if(s){s.textContent=sig;s.style.color=(score||0)>0?'var(--green)':(score||0)<0?'var(--red)':'var(--muted)';}
+    if(v)v.style.color=(bull===true)?'var(--green)':(bull===false)?'var(--red)':'var(--muted)';
   }
 
-  // OB Signal
-  const obScore=ob?(ob.dir==='LONG'?100:-100):0;
-  setInd('ob', ob?ob.dir+' +'+ob.move+'%':'Suche...', obScore, ob?(ob.dir+' Order Block! TP:$'+ob.tp.toFixed(0)):'Kein OB Signal', ob?(ob.dir==='LONG'):null);
-  // EMA – Score aus Differenz berechnen
-  const emaScoreReal=a.ema.bull?Math.min(100,Math.abs(a.ema.score)):- Math.min(100,Math.abs(a.ema.score));
-  setInd('ema', a.ema.val, emaScoreReal, a.ema.sig, a.ema.bull);
-  // RSI – direkt aus Wert ableiten
-  const rsiNum=a.rsi.num||50;
-  const rsiScoreReal=rsiNum<30?80:rsiNum<45?40:rsiNum>70?-80:rsiNum>55?-40:0;
-  setInd('rsi', 'RSI: '+rsiNum.toFixed(1), rsiScoreReal, a.rsi.sig, rsiNum<50);
-  // MACD
-  const macdScoreReal=a.macd.bull?Math.min(100,Math.abs(parseFloat(a.macd.val)||0)*500):-Math.min(100,Math.abs(parseFloat(a.macd.val)||0)*500);
-  setInd('macd', a.macd.val, macdScoreReal, a.macd.sig, a.macd.bull);
-  // BB
-  const bbNum=parseFloat(a.bb.val)||50;
-  const bbScoreReal=bbNum<20?80:bbNum<40?30:bbNum>80?-80:bbNum>60?-30:0;
-  setInd('bb', a.bb.val, bbScoreReal, a.bb.sig, bbNum<50);
-  // Stoch
-  const stochNum=parseFloat(a.stoch.val)||50;
-  const stochScoreReal=stochNum<20?80:stochNum<40?30:stochNum>80?-80:stochNum>60?-30:0;
-  setInd('stoch', a.stoch.val, stochScoreReal, a.stoch.sig, stochNum<50);
-  // ATR
-  setInd('atr', a.atr.val, Math.min(100,a.atr.score), a.atr.sig, null);
-  // Zeit
-  const timeScoreReal=a.time.score-40; // 0-80 → -40 bis +40
-  setInd('time', a.time.val, timeScoreReal*2, a.time.sig, a.time.score>40);
-  // Kerzen
-  setInd('candle', a.candle.val, a.candle.score, a.candle.sig, a.candle.bull);
-  // Volumen
-  setInd('vol', a.vol.val, Math.min(100,Math.abs(a.vol.score)), a.vol.sig, null);
+  setInd('ob', ob?ob.dir+' +'+ob.move+'%':'Suche...', ob?(ob.dir==='LONG'?100:-100):0, ob?ob.dir+' Order Block erkannt!':'Kein Signal', ob?ob.dir==='LONG':null);
+  setInd('ema',a.ema.val,a.ema.score,a.ema.sig,a.ema.bull);
+  setInd('rsi',a.rsi.val,a.rsi.score,a.rsi.sig,a.rsi.bull);
+  setInd('macd',a.macd.val,a.macd.score,a.macd.sig,a.macd.bull);
+  setInd('bb',a.bb.val,a.bb.score,a.bb.sig,a.bb.bull);
+  setInd('stoch',a.stoch.val,a.stoch.score,a.stoch.sig,a.stoch.bull);
+  setInd('atr',a.atr.val,a.atr.score,a.atr.sig,null);
+  setInd('time',a.time.val,a.time.score,a.time.sig,a.time.score>50);
+  setInd('candle',a.candle.val,a.candle.score,a.candle.sig,a.candle.bull);
+  setInd('vol',a.vol.val,a.vol.score,a.vol.sig,null);
 
   // Signal Badge
   const sb=document.getElementById('sigBadge');
@@ -516,67 +470,6 @@ function updateIndicatorUI(a, ob){
 
   // OB Visualizer
   updateOBViz(lastCandles, ob);
-
-  // FVG Update
-  updateFVGUI(a.fvgs||[], lastCandles);
-}
-
-function updateFVGUI(fvgs, candles){
-  const box=document.getElementById('fvgBox');
-  if(!box)return;
-  const currentPrice=candles.length>0?candles[candles.length-1].close:0;
-  if(!fvgs.length){box.innerHTML='<div style="font-size:11px;color:var(--muted)">Keine FVGs in den letzten 25 Kerzen gefunden.</div>';return;}
-
-  // Sortiere: neueste zuerst
-  const sorted=fvgs.slice().sort((a,b)=>b.idx-a.idx).slice(0,6);
-
-  box.innerHTML=sorted.map(fvg=>{
-    const isBull=fvg.type==='BULL';
-    const col=isBull?'var(--green)':'var(--red)';
-    const midpoint=(fvg.high+fvg.low)/2;
-    const dist=Math.abs(currentPrice-midpoint);
-    const distPct=dist/currentPrice*100;
-
-    // Wahrscheinlichkeit der Füllung (aus Marktforschung)
-    // Kleiner FVG + nahe am Preis = höhere Wahrscheinlichkeit
-    let fillProb=0;
-    if(distPct<0.1) fillProb=90;
-    else if(distPct<0.2) fillProb=75;
-    else if(distPct<0.5) fillProb=55;
-    else if(distPct<1.0) fillProb=35;
-    else fillProb=20;
-
-    // Korrektur basierend auf Trend
-    if(isBull&&lastAnalysis?.tBull) fillProb=Math.min(95,fillProb+10);
-    if(!isBull&&!lastAnalysis?.tBull) fillProb=Math.min(95,fillProb+10);
-    if(isBull&&!lastAnalysis?.tBull) fillProb=Math.max(10,fillProb-15);
-    if(!isBull&&lastAnalysis?.tBull) fillProb=Math.max(10,fillProb-15);
-
-    const probCol=fillProb>=70?'var(--green)':fillProb>=40?'var(--gold)':'var(--red)';
-    const dir=currentPrice<midpoint?(isBull?'⬆️ Preis muss steigen':'⬆️ Preis muss steigen'):(isBull?'⬇️ Preis muss fallen':'⬇️ Preis muss fallen');
-    const aboveBelow=currentPrice<fvg.low?'Über Preis (Magnet ↑)':currentPrice>fvg.high?'Unter Preis (Magnet ↓)':'Preis IM FVG!';
-
-    return `<div style="background:var(--bg);border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid ${col}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-weight:bold;color:${col}">${isBull?'▲ BULLISH FVG':'▼ BEARISH FVG'}</span>
-        <span style="font-size:9px;color:var(--muted)">${aboveBelow}</span>
-        <span style="font-weight:bold;font-size:14px;color:${probCol}">${fillProb}% Füllung</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:10px;margin-bottom:6px">
-        <div><div style="color:var(--muted);font-size:8px">FVG HOCH</div><div style="color:var(--green)">$${fvg.high.toFixed(1)}</div></div>
-        <div><div style="color:var(--muted);font-size:8px">FVG TIEF</div><div style="color:var(--red)">$${fvg.low.toFixed(1)}</div></div>
-        <div><div style="color:var(--muted);font-size:8px">GRÖSSE</div><div>$${fvg.size.toFixed(1)} (${fvg.pct.toFixed(3)}%)</div></div>
-        <div><div style="color:var(--muted);font-size:8px">DISTANZ</div><div style="color:var(--gold)">$${dist.toFixed(1)} (${distPct.toFixed(2)}%)</div></div>
-      </div>
-      <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${fillProb}%;background:${probCol};border-radius:3px;transition:width .5s"></div>
-      </div>
-      <div style="font-size:9px;color:var(--muted);margin-top:4px">
-        ${fillProb>=70?'🎯 Hohe Wahrscheinlichkeit – FVG wird wahrscheinlich gefüllt!':fillProb>=40?'⚡ Mittlere Wahrscheinlichkeit – beobachten':'⚠️ Niedrige Wahrscheinlichkeit – FVG bleibt evtl. offen'}
-        ${isBull?' | Aufwärts-FVG (Käufer-Imbalance)':' | Abwärts-FVG (Verkäufer-Imbalance)'}
-      </div>
-    </div>`;
-  }).join('');
 }
 
 function updateOBViz(candles, ob){
@@ -620,16 +513,7 @@ function detectAllOBs(candles,analysis){
         const tp=entry*(1+tpPct/100);
         if(tp<=entry)continue;
         if(tpPct<0.12)continue; // Gebühren-Schutz
-        // Konfidenz-Score für Positionsgröße
-        const rsiNum=analysis?analysis.rsi.num||50:50;
-        const trendOk=analysis?analysis.tBull:true;
-        const fvgMatch=analysis?.fvgs?.some(f=>f.type==='BULL'&&Math.abs(f.low-entry)/entry<0.005)||false;
-        let confidence=1.0; // Standard 100%
-        if(trendOk) confidence+=0.2;           // +20% wenn Trend bullish
-        if(rsiNum<45) confidence+=0.1;          // +10% wenn RSI bullish
-        if(fvgMatch) confidence+=0.2;           // +20% wenn FVG in gleicher Richtung
-        confidence=Math.min(1.5,confidence);    // Max 150%
-        found.push({dir:'LONG',entry,tp,tpPct,move:move.toFixed(3),key,idx:i,ob_high:ob.high,ob_low:ob.low,confidence});
+        found.push({dir:'LONG',entry,tp,tpPct,move:move.toFixed(3),key,idx:i,ob_high:ob.high,ob_low:ob.low});
       }
     }
     if(ob.bull&&!b1.bull&&!b2.bull&&!b3.bull){
@@ -641,15 +525,7 @@ function detectAllOBs(candles,analysis){
         const tp=entry*(1-tpPct/100);
         if(tp>=entry)continue;
         if(tpPct<0.12)continue;
-        const rsiNumS=analysis?analysis.rsi.num||50:50;
-        const trendOkS=analysis?!analysis.tBull:true;
-        const fvgMatchS=analysis?.fvgs?.some(f=>f.type==='BEAR'&&Math.abs(f.high-entry)/entry<0.005)||false;
-        let confidenceS=1.0;
-        if(trendOkS) confidenceS+=0.2;
-        if(rsiNumS>55) confidenceS+=0.1;
-        if(fvgMatchS) confidenceS+=0.2;
-        confidenceS=Math.min(1.5,confidenceS);
-        found.push({dir:'SHORT',entry,tp,tpPct,move:move.toFixed(3),key,idx:i,ob_high:ob.high,ob_low:ob.low,confidence:confidenceS});
+        found.push({dir:'SHORT',entry,tp,tpPct,move:move.toFixed(3),key,idx:i,ob_high:ob.high,ob_low:ob.low});
       }
     }
   }
@@ -848,13 +724,10 @@ function getAvailableZone(){
 function getZoneParams(zone){
   const cap=parseFloat(document.getElementById('capital').value)||85;
   const lev=parseInt(document.getElementById('maxLev').value)||10;
-  // Nutze 90% des Kapitals gleichmäßig auf 3 Zonen
-  // So funktionieren alle 3 Zonen auch bei kleinem Kapital!
-  const usable=cap*0.90; // 90% verfügbar (10% Reserve)
   switch(zone){
-    case 1:return{margin:usable*0.37,leverage:lev};
-    case 2:return{margin:usable*0.33,leverage:lev};
-    case 3:return{margin:usable*0.30,leverage:Math.max(1,Math.round(lev/2))};
+    case 1:return{margin:cap*0.40,leverage:lev};
+    case 2:return{margin:cap*0.30,leverage:lev};
+    case 3:return{margin:cap*0.30,leverage:Math.max(1,Math.round(lev/2))};
     default:return null;
   }
 }
@@ -863,14 +736,12 @@ function getZoneParams(zone){
 async function executeTrade(ob,zone){
   const zp=getZoneParams(zone);if(!zp)return;
   const {margin,leverage}=zp;
-  const confidence=ob.confidence||1.0;
-  const adjMargin=margin*confidence; // Größerer Trade bei hoher Konfidenz
-  const notional=adjMargin*leverage;
+  const notional=margin*leverage;
   const fee=notional*FEE_PCT;
   const side=ob.dir==='LONG'?'Buy':'Sell';
   const qty=(notional/ob.entry).toFixed(3);
 
-  log(`🚀 Z${zone} ${ob.dir} | $${adjMargin.toFixed(0)}×${leverage}× [Konfidenz:${(confidence*100).toFixed(0)}%] = $${notional.toFixed(0)} | TP:${ob.tpPct}% | Fee:$${fee.toFixed(3)}`,'ok');
+  log(`🚀 Z${zone} ${ob.dir} | $${margin.toFixed(0)}×${leverage}× = $${notional.toFixed(0)} | TP:${ob.tpPct}% | Fee:$${fee.toFixed(3)}`,'ok');
 
   await bPost('/v5/position/set-leverage',{category:'linear',symbol:SYMBOL,buyLeverage:leverage.toString(),sellLeverage:leverage.toString()});
   const result=await bPost('/v5/order/create',{category:'linear',symbol:SYMBOL,side,orderType:'Market',qty,timeInForce:'GTC'});
@@ -880,30 +751,22 @@ async function executeTrade(ob,zone){
   document.getElementById('tradeCount').textContent=tradeCount;
   stats.totalFee+=fee;
 
-  // Warte auf Fill mit Retry
-  let fillConfirmed = false;
-  for(let attempt=1; attempt<=3; attempt++){
-    await new Promise(r=>setTimeout(r,800));
-    const posData=await bGet('/v5/position/list',{category:'linear',symbol:SYMBOL});
-    if(posData?.list){
-      const pos=posData.list.find(p=>p.side===side&&parseFloat(p.size)>0);
-      if(pos){
-        const re=parseFloat(pos.avgPrice);
-        const tpPct=parseFloat(document.getElementById('tpPct').value)||0.30;
-        let tp=side==='Buy'?re*(1+tpPct/100):re*(1-tpPct/100);
-        if(side==='Buy'&&tp<=re)tp=re*1.003;
-        if(side==='Sell'&&tp>=re)tp=re*0.997;
-        const tradeId=result.orderId||Date.now().toString();
-        openTrades[tradeId]={zone,side,entry:re,tp,openTime:Date.now(),notional,hedgeActive:false};
-        log(`✅ Z${zone} Fill:$${re.toFixed(2)} | TP:$${tp.toFixed(2)} | SL:-${(parseFloat(document.getElementById('adaptExit').value||0.3)*5).toFixed(1)}%`,'ok');
-        addHistory(re,tp,0,side,'open','OB Z'+zone);
-        fillConfirmed=true;
-        break;
-      }
+  await new Promise(r=>setTimeout(r,700));
+  const posData=await bGet('/v5/position/list',{category:'linear',symbol:SYMBOL});
+  if(posData?.list){
+    const pos=posData.list.find(p=>p.side===side&&parseFloat(p.size)>0);
+    if(pos){
+      const re=parseFloat(pos.avgPrice);
+      const tpPct=parseFloat(document.getElementById('tpPct').value)||0.18;
+      let tp=side==='Buy'?re*(1+tpPct/100):re*(1-tpPct/100);
+      if(side==='Buy'&&tp<=re)tp=re*1.0018;
+      if(side==='Sell'&&tp>=re)tp=re*0.9982;
+      const tradeId=result.orderId||Date.now().toString();
+      openTrades[tradeId]={zone,side,entry:re,tp,openTime:Date.now(),notional,hedgeActive:false};
+      log(`✅ Z${zone} Fill:$${re.toFixed(2)} | TP:$${tp.toFixed(2)}`,'ok');
+      addHistory(re,tp,0,side,'open','OB Z'+zone);
     }
-    log(`⏳ Warte auf Fill... Versuch ${attempt}/3`,'warn');
   }
-  if(!fillConfirmed) log(`⚠️ Fill nicht bestätigt – prüfe Bybit!`,'err');
 }
 
 // ── Scan Loop ─────────────────────────────────────────
