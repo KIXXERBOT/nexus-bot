@@ -560,26 +560,26 @@ function updateFVGUI(fvgs, candles){
     const dir=currentPrice<midpoint?(isBull?'⬆️ Preis muss steigen':'⬆️ Preis muss steigen'):(isBull?'⬇️ Preis muss fallen':'⬇️ Preis muss fallen');
     const aboveBelow=currentPrice<fvg.low?'Über Preis (Magnet ↑)':currentPrice>fvg.high?'Unter Preis (Magnet ↓)':'Preis IM FVG!';
 
-    return \`<div style="background:var(--bg);border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid \${col}">
+    return `<div style="background:var(--bg);border-radius:6px;padding:8px;margin-bottom:6px;border-left:3px solid ${col}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-weight:bold;color:\${col}">\${isBull?'▲ BULLISH FVG':'▼ BEARISH FVG'}</span>
-        <span style="font-size:9px;color:var(--muted)">\${aboveBelow}</span>
-        <span style="font-weight:bold;font-size:14px;color:\${probCol}">\${fillProb}% Füllung</span>
+        <span style="font-weight:bold;color:${col}">${isBull?'▲ BULLISH FVG':'▼ BEARISH FVG'}</span>
+        <span style="font-size:9px;color:var(--muted)">${aboveBelow}</span>
+        <span style="font-weight:bold;font-size:14px;color:${probCol}">${fillProb}% Füllung</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:10px;margin-bottom:6px">
-        <div><div style="color:var(--muted);font-size:8px">FVG HOCH</div><div style="color:var(--green)">$\${fvg.high.toFixed(1)}</div></div>
-        <div><div style="color:var(--muted);font-size:8px">FVG TIEF</div><div style="color:var(--red)">$\${fvg.low.toFixed(1)}</div></div>
-        <div><div style="color:var(--muted);font-size:8px">GRÖSSE</div><div>$\${fvg.size.toFixed(1)} (\${fvg.pct.toFixed(3)}%)</div></div>
-        <div><div style="color:var(--muted);font-size:8px">DISTANZ</div><div style="color:var(--gold)">$\${dist.toFixed(1)} (\${distPct.toFixed(2)}%)</div></div>
+        <div><div style="color:var(--muted);font-size:8px">FVG HOCH</div><div style="color:var(--green)">$${fvg.high.toFixed(1)}</div></div>
+        <div><div style="color:var(--muted);font-size:8px">FVG TIEF</div><div style="color:var(--red)">$${fvg.low.toFixed(1)}</div></div>
+        <div><div style="color:var(--muted);font-size:8px">GRÖSSE</div><div>$${fvg.size.toFixed(1)} (${fvg.pct.toFixed(3)}%)</div></div>
+        <div><div style="color:var(--muted);font-size:8px">DISTANZ</div><div style="color:var(--gold)">$${dist.toFixed(1)} (${distPct.toFixed(2)}%)</div></div>
       </div>
       <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:\${fillProb}%;background:\${probCol};border-radius:3px;transition:width .5s"></div>
+        <div style="height:100%;width:${fillProb}%;background:${probCol};border-radius:3px;transition:width .5s"></div>
       </div>
       <div style="font-size:9px;color:var(--muted);margin-top:4px">
-        \${fillProb>=70?'🎯 Hohe Wahrscheinlichkeit – FVG wird wahrscheinlich gefüllt!':fillProb>=40?'⚡ Mittlere Wahrscheinlichkeit – beobachten':'⚠️ Niedrige Wahrscheinlichkeit – FVG bleibt evtl. offen'}
-        \${isBull?' | Aufwärts-FVG (Käufer-Imbalance)':' | Abwärts-FVG (Verkäufer-Imbalance)'}
+        ${fillProb>=70?'🎯 Hohe Wahrscheinlichkeit – FVG wird wahrscheinlich gefüllt!':fillProb>=40?'⚡ Mittlere Wahrscheinlichkeit – beobachten':'⚠️ Niedrige Wahrscheinlichkeit – FVG bleibt evtl. offen'}
+        ${isBull?' | Aufwärts-FVG (Käufer-Imbalance)':' | Abwärts-FVG (Verkäufer-Imbalance)'}
       </div>
-    </div>\`;
+    </div>`;
   }).join('');
 }
 
