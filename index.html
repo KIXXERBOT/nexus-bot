@@ -419,7 +419,7 @@ function calcAllIndicators(candles){
     total:Math.max(-100,Math.min(100,total+timeBonus)),
     fvgs,
     ema:{val:e9.toFixed(1)+'/'+e21.toFixed(1),score:emaScore,bull:emaBull,sig:emaBull?'▲ BULLISH':'▼ BEARISH'},
-    rsi:{val:rsi.toFixed(1),score:rsiScore,bull:rsi<50,sig:rsi<30?'OVERSOLD':rsi>70?'OVERBOUGHT':rsi<50?'BULLISH':'BEARISH'},
+    rsi:{val:rsi.toFixed(1),num:rsi,score:rsiScore,bull:rsi<50,sig:rsi<30?'OVERSOLD →LONG':rsi>70?'OVERBOUGHT →SHORT':rsi<50?'BULLISH':'BEARISH'},
     macd:{val:macdLine.toFixed(2),score:macdScore,bull:macdBull,sig:macdBull?'▲ BULLISH':'▼ BEARISH'},
     bb:{val:bbPos.toFixed(0)+'%',score:bbScore,bull:bbPos<50,sig:bbPos<20?'OVERSOLD':bbPos>80?'OVERBOUGHT':bbPos<50?'MITTE-UNTEN':'MITTE-OBEN'},
     stoch:{val:stochK.toFixed(1),score:stochScore,bull:stochK<50,sig:stochK<20?'OVERSOLD':stochK>80?'OVERBOUGHT':stochK<50?'BULLISH':'BEARISH'},
@@ -476,9 +476,9 @@ function updateIndicatorUI(a, ob){
   const emaScoreReal=a.ema.bull?Math.min(100,Math.abs(a.ema.score)):- Math.min(100,Math.abs(a.ema.score));
   setInd('ema', a.ema.val, emaScoreReal, a.ema.sig, a.ema.bull);
   // RSI – direkt aus Wert ableiten
-  const rsiNum=parseFloat(a.rsi.val)||50;
+  const rsiNum=a.rsi.num||50;
   const rsiScoreReal=rsiNum<30?80:rsiNum<45?40:rsiNum>70?-80:rsiNum>55?-40:0;
-  setInd('rsi', 'RSI: '+a.rsi.val, rsiScoreReal, a.rsi.sig, rsiNum<50);
+  setInd('rsi', 'RSI: '+rsiNum.toFixed(1), rsiScoreReal, a.rsi.sig, rsiNum<50);
   // MACD
   const macdScoreReal=a.macd.bull?Math.min(100,Math.abs(parseFloat(a.macd.val)||0)*500):-Math.min(100,Math.abs(parseFloat(a.macd.val)||0)*500);
   setInd('macd', a.macd.val, macdScoreReal, a.macd.sig, a.macd.bull);
@@ -621,7 +621,7 @@ function detectAllOBs(candles,analysis){
         if(tp<=entry)continue;
         if(tpPct<0.12)continue; // Gebühren-Schutz
         // Konfidenz-Score für Positionsgröße
-        const rsiNum=analysis?analysis.rsi.val?parseFloat(analysis.rsi.val):50:50;
+        const rsiNum=analysis?analysis.rsi.num||50:50;
         const trendOk=analysis?analysis.tBull:true;
         const fvgMatch=analysis?.fvgs?.some(f=>f.type==='BULL'&&Math.abs(f.low-entry)/entry<0.005)||false;
         let confidence=1.0; // Standard 100%
@@ -641,7 +641,7 @@ function detectAllOBs(candles,analysis){
         const tp=entry*(1-tpPct/100);
         if(tp>=entry)continue;
         if(tpPct<0.12)continue;
-        const rsiNumS=analysis?analysis.rsi.val?parseFloat(analysis.rsi.val):50:50;
+        const rsiNumS=analysis?analysis.rsi.num||50:50;
         const trendOkS=analysis?!analysis.tBull:true;
         const fvgMatchS=analysis?.fvgs?.some(f=>f.type==='BEAR'&&Math.abs(f.high-entry)/entry<0.005)||false;
         let confidenceS=1.0;
