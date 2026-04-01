@@ -226,34 +226,154 @@ body{font-family:'Courier New',monospace;background:var(--bg);color:var(--text);
     <div class="pt" style="display:flex;justify-content:space-between;align-items:center">
       </div>
 
-  <!-- MANUELLES TRADING SIGNAL -->
+  <!-- MANUELLES TRADING SIGNAL MULTI-TIMEFRAME -->
   <div class="panel">
-    <div class="pt">🎯 Manuelles Trading Signal · Nur visuelle Orientierung</div>
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
-      <div>
-        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center">▲ LONG</div>
-        <div id="sigLongEntry" style="padding:10px 12px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
-          <div style="font-size:12px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="sigLETxt">—</div>
-          <div style="font-size:9px;color:var(--muted)" id="sigLEInfo">Warte auf Daten...</div>
+    <div class="pt" style="display:flex;justify-content:space-between;align-items:center">
+      <span>🎯 Manuelles Trading Signal · Multi-Timeframe</span>
+      <span style="font-size:9px;color:var(--muted)">Nur visuelle Orientierung</span>
+    </div>
+
+    <!-- GESAMT STIMMUNG BALKEN -->
+    <div style="margin-bottom:12px;padding:10px;background:var(--bg);border-radius:6px">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📊 Gesamt-Stimmung · Alle Timeframes</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:9px;color:var(--red);font-weight:bold;width:40px">BEAR</span>
+        <div style="flex:1;height:18px;background:var(--bg3);border-radius:9px;overflow:hidden;position:relative">
+          <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:var(--muted)"></div>
+          <div id="moodFill" style="position:absolute;height:100%;border-radius:9px;transition:all .5s;width:0%"></div>
         </div>
-        <div id="sigLongStop" style="padding:10px 12px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
-          <div style="font-size:12px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="sigLSTxt">—</div>
-          <div style="font-size:9px;color:var(--muted)" id="sigLSInfo">Warte auf Daten...</div>
-        </div>
+        <span style="font-size:9px;color:var(--green);font-weight:bold;width:40px;text-align:right">BULL</span>
+        <span id="moodPct" style="font-size:16px;font-weight:bold;width:50px;text-align:right;color:var(--muted)">50%</span>
       </div>
-      <div>
-        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center">▼ SHORT</div>
-        <div id="sigShortEntry" style="padding:10px 12px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
-          <div style="font-size:12px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="sigSETxt">—</div>
-          <div style="font-size:9px;color:var(--muted)" id="sigSEInfo">Warte auf Daten...</div>
+      <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--muted)">
+        <span>Stark BEARISH</span><span>Neutral</span><span>Stark BULLISH</span>
+      </div>
+      <div id="moodLabel" style="text-align:center;margin-top:6px;font-size:10px;font-weight:bold;color:var(--muted)">Analysiere...</div>
+    </div>
+
+    <!-- TIMEFRAME TABS -->
+    <div style="display:flex;gap:4px;margin-bottom:10px">
+      <button onclick="showTF('10s')" id="tab10s" style="flex:1;padding:5px;font-size:9px;font-family:'Courier New',monospace;border:1px solid var(--gold);background:var(--gold);color:#000;border-radius:4px;cursor:pointer;font-weight:bold">10s</button>
+      <button onclick="showTF('1m')" id="tab1m" style="flex:1;padding:5px;font-size:9px;font-family:'Courier New',monospace;border:1px solid var(--bg3);background:var(--bg3);color:var(--muted);border-radius:4px;cursor:pointer">1m</button>
+      <button onclick="showTF('5m')" id="tab5m" style="flex:1;padding:5px;font-size:9px;font-family:'Courier New',monospace;border:1px solid var(--bg3);background:var(--bg3);color:var(--muted);border-radius:4px;cursor:pointer">5m</button>
+      <button onclick="showTF('15m')" id="tab15m" style="flex:1;padding:5px;font-size:9px;font-family:'Courier New',monospace;border:1px solid var(--bg3);background:var(--bg3);color:var(--muted);border-radius:4px;cursor:pointer">15m</button>
+    </div>
+
+    <!-- SIGNAL BOXEN (per TF) -->
+    <div id="tfPanels">
+      <!-- 10s -->
+      <div id="tf10s" style="display:block">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▲ LONG</div>
+            <div id="le10s" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="le10sTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="le10sInfo">—</div>
+            </div>
+            <div id="ls10s" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ls10sTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ls10sInfo">—</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▼ SHORT</div>
+            <div id="se10s" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="se10sTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="se10sInfo">—</div>
+            </div>
+            <div id="ss10s" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ss10sTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ss10sInfo">—</div>
+            </div>
+          </div>
         </div>
-        <div id="sigShortStop" style="padding:10px 12px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
-          <div style="font-size:12px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="sigSSTxt">—</div>
-          <div style="font-size:9px;color:var(--muted)" id="sigSSInfo">Warte auf Daten...</div>
+        <div id="det10s" style="margin-top:8px;padding:7px;background:var(--bg);border-radius:5px;font-size:9px;line-height:1.8;color:var(--muted)">—</div>
+      </div>
+      <!-- 1m -->
+      <div id="tf1m" style="display:none">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▲ LONG</div>
+            <div id="le1m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="le1mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="le1mInfo">—</div>
+            </div>
+            <div id="ls1m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ls1mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ls1mInfo">—</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▼ SHORT</div>
+            <div id="se1m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="se1mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="se1mInfo">—</div>
+            </div>
+            <div id="ss1m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ss1mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ss1mInfo">—</div>
+            </div>
+          </div>
         </div>
+        <div id="det1m" style="margin-top:8px;padding:7px;background:var(--bg);border-radius:5px;font-size:9px;line-height:1.8;color:var(--muted)">—</div>
+      </div>
+      <!-- 5m -->
+      <div id="tf5m" style="display:none">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▲ LONG</div>
+            <div id="le5m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="le5mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="le5mInfo">—</div>
+            </div>
+            <div id="ls5m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ls5mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ls5mInfo">—</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▼ SHORT</div>
+            <div id="se5m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="se5mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="se5mInfo">—</div>
+            </div>
+            <div id="ss5m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ss5mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ss5mInfo">—</div>
+            </div>
+          </div>
+        </div>
+        <div id="det5m" style="margin-top:8px;padding:7px;background:var(--bg);border-radius:5px;font-size:9px;line-height:1.8;color:var(--muted)">—</div>
+      </div>
+      <!-- 15m -->
+      <div id="tf15m" style="display:none">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▲ LONG</div>
+            <div id="le15m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="le15mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="le15mInfo">—</div>
+            </div>
+            <div id="ls15m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ls15mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ls15mInfo">—</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;text-align:center">▼ SHORT</div>
+            <div id="se15m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);margin-bottom:6px;transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="se15mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="se15mInfo">—</div>
+            </div>
+            <div id="ss15m" style="padding:9px;border-radius:6px;text-align:center;border:2px solid var(--bg3);background:var(--bg3);transition:all .4s">
+              <div style="font-size:11px;font-weight:bold;margin-bottom:2px;color:var(--muted)" id="ss15mTxt">—</div>
+              <div style="font-size:9px;color:var(--muted)" id="ss15mInfo">—</div>
+            </div>
+          </div>
+        </div>
+        <div id="det15m" style="margin-top:8px;padding:7px;background:var(--bg);border-radius:5px;font-size:9px;line-height:1.8;color:var(--muted)">—</div>
       </div>
     </div>
-    <div id="sigDetail" style="margin-top:10px;padding:8px;background:var(--bg);border-radius:5px;font-size:9px;line-height:1.8;color:var(--muted)">Warte auf Scan...</div>
   </div>
   <div class="panel"><div class="pt" style="display:flex;justify-content:space-between;align-items:center"><span>Self-Learning AI · Supabase DB</span>
       <span class="db-pill off" id="dbPill">Verbinde...</span>
@@ -661,39 +781,147 @@ async function onKey(){
   const k=document.getElementById('apiKey').value.trim(),s=document.getElementById('apiSecret').value.trim();if(!k||!s)return;
   if(!syncStarted){syncStarted=true;log('Verbinde mit Bybit...','info');await syncPos();setInterval(syncPos,SYNC_MS);setInterval(async()=>{const p=await getPrice();if(p>0)document.getElementById('btcPrice').textContent='$'+p.toLocaleString('de-DE',{maximumFractionDigits:0});},PRICE_MS);log('Echtzeit-Sync aktiv!','ok');}
 }
-// MANUELLES TRADING SIGNAL (nur visuell)
-function updateManualSignal(){
-  const a=lastAnalysis;if(!a)return;
+// MANUELLES TRADING SIGNAL MULTI-TIMEFRAME (nur visuell)
+let activeTF='10s';
+let tfData={};  // Gespeicherte Scores per TF
+let tfTimer10s=null;
+
+function showTF(tf){
+  activeTF=tf;
+  ['10s','1m','5m','15m'].forEach(t=>{
+    const panel=document.getElementById('tf'+t);
+    const tab=document.getElementById('tab'+t);
+    if(panel)panel.style.display=t===tf?'block':'none';
+    if(tab){
+      if(t===tf){tab.style.background='var(--gold)';tab.style.color='#000';tab.style.borderColor='var(--gold)';}
+      else{tab.style.background='var(--bg3)';tab.style.color='var(--muted)';tab.style.borderColor='var(--bg3)';}
+    }
+  });
+}
+
+function calcSignalScore(candles){
+  if(!candles||candles.length<6)return{lS:0,sS:0,rsi:50,emaBull:false,bbPos:50,bullC:0,bearC:0};
+  const cls=candles.map(c=>c.close||c.c);
+  const his=candles.map(c=>c.high||c.h);
+  const los=candles.map(c=>c.low||c.l);
+  const last=cls[cls.length-1];
+  // RSI
+  let g=0,l=0;const st=Math.max(0,cls.length-14);
+  for(let i=st;i<cls.length;i++){const d=cls[i]-(cls[i-1]||cls[i]);if(d>0)g+=d;else l-=d;}
+  const rsi=l===0?100:100-(100/(1+g/l));
+  // EMA
+  function emC(arr,p){const k=2/(p+1);let e=arr[0];for(let i=1;i<arr.length;i++)e=arr[i]*k+e*(1-k);return e;}
+  const e9=emC(cls.slice(-Math.min(15,cls.length)),9),e21=emC(cls,Math.min(21,cls.length));
+  const emaBull=e9>e21;
+  // BB
+  const bPer=Math.min(20,cls.length);
+  const bMean=cls.slice(-bPer).reduce((a,b)=>a+b,0)/bPer;
+  const bStd=Math.sqrt(cls.slice(-bPer).reduce((a,b)=>a+Math.pow(b-bMean,2),0)/bPer);
+  const bbPos=bStd>0?(last-(bMean-2*bStd))/((bMean+2*bStd)-(bMean-2*bStd))*100:50;
+  // Kerzen
+  const l5=candles.slice(-Math.min(5,candles.length));
+  const bullC=l5.filter(c=>c.bull||(c.close||c.c)>(c.open||c.o)).length;
+  const bearC=l5.length-bullC;
+  // Scores berechnen
   let lS=0,sS=0;
-  if(a.rsi<30){lS+=30;}else if(a.rsi<45){lS+=15;}
-  if(a.rsi>70){sS+=30;}else if(a.rsi>55){sS+=15;}
-  if(a.emaBull){lS+=25;}else{sS+=25;}
-  if(a.bbPos<20){lS+=20;}else if(a.bbPos>80){sS+=20;}
-  else if(a.bbPos<40){lS+=8;}else if(a.bbPos>60){sS+=8;}
-  if(a.bullC>=4){lS+=20;}else if(a.bullC>=3){lS+=10;}
-  if(a.bearC>=4){sS+=20;}else if(a.bearC>=3){sS+=10;}
-  const f30=document.getElementById('fc30dir');
-  const f2=document.getElementById('fc2dir');
-  if(f30){if(f30.textContent.includes('BULLISH'))lS+=10;else sS+=10;}
-  if(f2){if(f2.textContent.includes('BULLISH'))lS+=8;else sS+=8;}
+  if(rsi<30){lS+=30;}else if(rsi<45){lS+=15;}
+  if(rsi>70){sS+=30;}else if(rsi>55){sS+=15;}
+  if(emaBull){lS+=25;}else{sS+=25;}
+  if(bbPos<20){lS+=20;}else if(bbPos>80){sS+=20;}
+  else if(bbPos<40){lS+=8;}else if(bbPos>60){sS+=8;}
+  if(bullC>=4){lS+=20;}else if(bullC>=3){lS+=10;}
+  if(bearC>=4){sS+=20;}else if(bearC>=3){sS+=10;}
+  return{lS,sS,rsi,emaBull,bbPos,bullC,bearC};
+}
+
+function applyBox(elId,txtId,infoId,active,isBull,label,info){
+  const el=document.getElementById(elId),txt=document.getElementById(txtId),inf=document.getElementById(infoId);
+  if(!el||!txt||!inf)return;
+  if(active){el.style.background=isBull?'rgba(34,197,94,.18)':'rgba(239,68,68,.18)';el.style.borderColor=isBull?'var(--green)':'var(--red)';txt.style.color=isBull?'var(--green)':'var(--red)';}
+  else{el.style.background='var(--bg3)';el.style.borderColor='var(--bg3)';txt.style.color='var(--muted)';}
+  txt.textContent=label;inf.textContent=info;
+}
+
+function renderTFSignal(suffix,d){
   const GO=55;
-  function applyBox(el,txtEl,infoEl,active,isBull,label,info){
-    if(active){el.style.background=isBull?'rgba(34,197,94,.18)':'rgba(239,68,68,.18)';el.style.borderColor=isBull?'var(--green)':'var(--red)';txtEl.style.color=isBull?'var(--green)':'var(--red)';}
-    else{el.style.background='var(--bg3)';el.style.borderColor='var(--bg3)';txtEl.style.color='var(--muted)';}
-    txtEl.textContent=label;infoEl.textContent=info;
-  }
-  applyBox(document.getElementById('sigLongEntry'),document.getElementById('sigLETxt'),document.getElementById('sigLEInfo'),lS>=GO,true,lS>=GO?'▲ LONG ENTRY':'▲ Long – warten',lS>=GO?'Score '+lS+' | RSI '+a.rsi.toFixed(0)+(a.emaBull?' | EMA↑':'')+(a.bbPos<30?' | BB-Tief':''):'Score '+lS+' – zu schwach');
-  applyBox(document.getElementById('sigLongStop'),document.getElementById('sigLSTxt'),document.getElementById('sigLSInfo'),sS>=GO&&sS>lS,false,sS>=GO&&sS>lS?'🛑 LONG STOPPEN':'🛑 Long Stop – kein Signal',sS>=GO&&sS>lS?'Gegentrend '+sS+(!a.emaBull?' | EMA↓':'')+(a.rsi>65?' | RSI hoch':'')+(a.bearC>=3?' | '+a.bearC+'x Rot':''):'Kein Gegensignal');
-  applyBox(document.getElementById('sigShortEntry'),document.getElementById('sigSETxt'),document.getElementById('sigSEInfo'),sS>=GO,false,sS>=GO?'▼ SHORT ENTRY':'▼ Short – warten',sS>=GO?'Score '+sS+' | RSI '+a.rsi.toFixed(0)+(!a.emaBull?' | EMA↓':'')+(a.bbPos>70?' | BB-Hoch':''):'Score '+sS+' – zu schwach');
-  applyBox(document.getElementById('sigShortStop'),document.getElementById('sigSSTxt'),document.getElementById('sigSSInfo'),lS>=GO&&lS>sS,true,lS>=GO&&lS>sS?'🛑 SHORT STOPPEN':'🛑 Short Stop – kein Signal',lS>=GO&&lS>sS?'Gegentrend '+lS+(a.emaBull?' | EMA↑':'')+(a.rsi<35?' | RSI tief':'')+(a.bullC>=3?' | '+a.bullC+'x Grün':''):'Kein Gegensignal');
+  const{lS,sS,rsi,emaBull,bbPos,bullC,bearC}=d;
+  applyBox('le'+suffix,'le'+suffix+'Txt','le'+suffix+'Info',lS>=GO,true,
+    lS>=GO?'▲ LONG ENTRY':'▲ Long – warten',
+    lS>=GO?'Score '+lS+' | RSI '+rsi.toFixed(0)+(emaBull?' EMA↑':'')+(bbPos<30?' BB↓':''):'Score '+lS+' – zu schwach');
+  applyBox('ls'+suffix,'ls'+suffix+'Txt','ls'+suffix+'Info',sS>=GO&&sS>lS,false,
+    sS>=GO&&sS>lS?'🛑 LONG STOPPEN':'🛑 Long – kein Stop-Signal',
+    sS>=GO&&sS>lS?'Gegentrend '+sS+(!emaBull?' EMA↓':'')+(rsi>65?' RSI↑':'')+(bearC>=3?' '+bearC+'x🔴':''):'Kein Gegensignal');
+  applyBox('se'+suffix,'se'+suffix+'Txt','se'+suffix+'Info',sS>=GO,false,
+    sS>=GO?'▼ SHORT ENTRY':'▼ Short – warten',
+    sS>=GO?'Score '+sS+' | RSI '+rsi.toFixed(0)+(!emaBull?' EMA↓':'')+(bbPos>70?' BB↑':''):'Score '+sS+' – zu schwach');
+  applyBox('ss'+suffix,'ss'+suffix+'Txt','ss'+suffix+'Info',lS>=GO&&lS>sS,true,
+    lS>=GO&&lS>sS?'🛑 SHORT STOPPEN':'🛑 Short – kein Stop-Signal',
+    lS>=GO&&lS>sS?'Gegentrend '+lS+(emaBull?' EMA↑':'')+(rsi<35?' RSI↓':'')+(bullC>=3?' '+bullC+'x🟢':''):'Kein Gegensignal');
+  const det=document.getElementById('det'+suffix);
   const dom=lS>sS?'LONG':'SHORT',domS=Math.max(lS,sS);
-  const det=document.getElementById('sigDetail');
-  if(det)det.innerHTML='<span style="color:var(--gold)">Signalanalyse:</span> RSI: <strong style="color:'+(a.rsi<35?'var(--green)':a.rsi>65?'var(--red)':'var(--muted)')+'">'+a.rsi.toFixed(0)+'</strong> | EMA: <strong style="color:'+(a.emaBull?'var(--green)':'var(--red)')+'">'+( a.emaBull?'↑ Bull':'↓ Bear')+'</strong> | BB: <strong>'+a.bbPos.toFixed(0)+'%</strong> | Kerzen: <strong style="color:'+(a.bullC>a.bearC?'var(--green)':'var(--red)')+'">'+a.bullC+'G/'+a.bearC+'R</strong><br>Dominant: <strong style="color:'+(dom==='LONG'?'var(--green)':'var(--red)')+'">'+dom+'</strong> ('+domS+' Pkt) | Long: '+lS+' | Short: '+sS;
+  if(det)det.innerHTML='<span style="color:var(--gold)">'+suffix+':</span> RSI <strong style="color:'+(rsi<35?'var(--green)':rsi>65?'var(--red)':'var(--muted)')+'">'+rsi.toFixed(0)+'</strong> | EMA <strong style="color:'+(emaBull?'var(--green)':'var(--red)')+'">'+( emaBull?'↑':'↓')+'</strong> | BB <strong>'+bbPos.toFixed(0)+'%</strong> | <strong style="color:'+(dom==='LONG'?'var(--green)':'var(--red)')+'">'+dom+' dominiert</strong> (L:'+lS+'/S:'+sS+')';
+  return{lS,sS};
+}
+
+function updateMoodBar(){
+  // Alle TF Scores aggregieren
+  const scores=Object.values(tfData);
+  if(!scores.length)return;
+  const totalL=scores.reduce((a,d)=>a+d.lS,0);
+  const totalS=scores.reduce((a,d)=>a+d.sS,0);
+  const total=totalL+totalS||1;
+  const bullPct=totalL/total*100;
+  const fill=document.getElementById('moodFill');
+  const pct=document.getElementById('moodPct');
+  const label=document.getElementById('moodLabel');
+  if(!fill||!pct||!label)return;
+  // Balken von Mitte aus
+  if(bullPct>50){
+    const w=(bullPct-50)*2;
+    fill.style.left='50%';fill.style.width=w+'%';
+    fill.style.background='var(--green)';
+    pct.style.color='var(--green)';pct.textContent=bullPct.toFixed(0)+'%';
+  }else{
+    const w=(50-bullPct)*2;
+    fill.style.left=(50-w)+'%';fill.style.width=w+'%';
+    fill.style.background='var(--red)';
+    pct.style.color='var(--red)';pct.textContent=bullPct.toFixed(0)+'%';
+  }
+  const txt=bullPct>=75?'🚀 STARK BULLISH – Long bevorzugen':bullPct>=60?'📈 BULLISH – Long Signal':bullPct>=50?'↗️ Leicht bullish':bullPct>=40?'↘️ Leicht bearish':bullPct>=25?'📉 BEARISH – Short Signal':'🔻 STARK BEARISH – Short bevorzugen';
+  const col=bullPct>=60?'var(--green)':bullPct>=40?'var(--gold)':'var(--red)';
+  label.innerHTML='<strong style="color:'+col+'">'+txt+'</strong>';
+}
+
+async function updateManualSignal(){
+  // 1min Kerzen bereits vorhanden (lastAnalysis)
+  if(lastAnalysis){
+    const candles=await getCandles();
+    if(candles.length>=6){
+      const d1m=calcSignalScore(candles);
+      tfData['1m']=d1m;
+      renderTFSignal('1m',d1m);
+      // 10s: nutze letzte 6 1min-Kerzen für schnellen Score
+      const d10s=calcSignalScore(candles.slice(-6));
+      tfData['10s']=d10s;
+      renderTFSignal('10s',d10s);
+    }
+  }
+  // 5min und 15min Daten laden
+  const [c5m,c15m]=await Promise.all([
+    fetch(BASE+'/v5/market/kline?category=linear&symbol='+SYMBOL+'&interval=5&limit=30').then(r=>r.json()).then(d=>d.result?.list?.reverse().map(k=>({ts:parseInt(k[0]),open:parseFloat(k[1]),high:parseFloat(k[2]),low:parseFloat(k[3]),close:parseFloat(k[4]),bull:parseFloat(k[4])>parseFloat(k[1])}))||[]).catch(()=>[]),
+    fetch(BASE+'/v5/market/kline?category=linear&symbol='+SYMBOL+'&interval=15&limit=30').then(r=>r.json()).then(d=>d.result?.list?.reverse().map(k=>({ts:parseInt(k[0]),open:parseFloat(k[1]),high:parseFloat(k[2]),low:parseFloat(k[3]),close:parseFloat(k[4]),bull:parseFloat(k[4])>parseFloat(k[1])}))||[]).catch(()=>[])
+  ]);
+  if(c5m.length>=6){const d5m=calcSignalScore(c5m);tfData['5m']=d5m;renderTFSignal('5m',d5m);}
+  if(c15m.length>=6){const d15m=calcSignalScore(c15m);tfData['15m']=d15m;renderTFSignal('15m',d15m);}
+  updateMoodBar();
 }
 // Init
 initDB();
 renderHourGrid({});
 setTimeout(refreshForecast,3000);
+// 10s Signal Update
+setInterval(updateManualSignal,10000);
+setTimeout(updateManualSignal,4000);
 </script>
 </body>
 </html>
